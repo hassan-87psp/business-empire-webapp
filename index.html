@@ -12,9 +12,9 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <script defer src="app-config.js?v=4"></script>
-<script defer src="auth-client.js?v=5"></script>
-<script defer src="storage-adapter.js?v=5"></script>
-<script defer src="app.js?v=5"></script>
+<script defer src="auth-client.js?v=4"></script>
+<script defer src="storage-adapter.js?v=4"></script>
+<script defer src="app.js?v=4"></script>
 <style>
 :root{
   --bg:#0B0E11; --bg2:#12151A; --card:#181A20; --card2:#1E2128;
@@ -416,10 +416,6 @@ tr:hover td{background:rgba(255,255,255,.02);}
 }
 .sidebar-details[open] summary::after{content:'▴'; color:var(--gold);}
 
-
-/* ===== COLLABORATOR ACCESS CENTER ===== */
-.collab-stats{grid-template-columns:repeat(4,1fr);}
-@media(max-width:700px){.collab-stats{grid-template-columns:1fr 1fr;}.rem-item{align-items:flex-start;flex-wrap:wrap}.rem-item .row-actions{width:100%;justify-content:flex-start!important;margin-top:8px}}
 @media(max-width:900px){
   .grid2{grid-template-columns:1fr;} .form-row, .form-row.wide{grid-template-columns:1fr 1fr;} .summary-row{grid-template-columns:1fr 1fr;}
 }
