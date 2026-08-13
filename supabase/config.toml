@@ -1,0 +1,2 @@
+[functions.manage-collaborator]
+verify_jwt = true

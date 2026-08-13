@@ -1,0 +1,47 @@
+BUSINESS EMPIRE V4 AUTH — NEXT SETUP
+
+1) SUPABASE SQL
+   - Open SQL Editor.
+   - Run: supabase-auth-v4.sql
+   - Then set your existing Auth user as the single owner by running:
+     update public.profiles
+     set role='owner', status='active', updated_at=now()
+     where email='YOUR-OWNER-EMAIL@example.com';
+
+2) EDGE FUNCTION
+   - Supabase Dashboard > Edge Functions > Create Function
+   - Name: manage-collaborator
+   - Replace its code with: supabase/functions/manage-collaborator/index.ts
+   - Deploy it.
+   - In Edge Functions > Secrets add:
+       APP_URL = https://hassan-87psp.github.io/business-empire-webapp/
+     SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by hosted Supabase automatically.
+
+3) GITHUB
+   Upload/replace these web files in the repository root:
+   index.html
+   app-config.js
+   auth-client.js
+   storage-adapter.js
+   app.js
+   manifest.webmanifest
+   service-worker.js
+   icons/
+
+4) AUTH SETTINGS
+   - Keep Email/Password enabled.
+   - Turn OFF public/new-user signup so accounts can only be created by Owner invitation.
+
+5) AUTH URL CONFIGURATION
+   Site URL and Redirect URL should remain:
+   https://hassan-87psp.github.io/business-empire-webapp/
+
+FINAL FLOW
+- One direct Email + Password login screen. No Owner/Collaborator choice and no public signup.
+- One Auth user is manually marked role=owner in SQL.
+- Owner opens Collaborators > Add Collaborator > name/email/businesses > Send Invitation.
+- Supabase emails the invitation.
+- Invite link opens the app > Set Your Password.
+- After password is saved, collaborator becomes active.
+- Future login is Email + Password.
+- Collaborator sees only assigned businesses; RLS also blocks unassigned business data in the database.

@@ -114,14 +114,17 @@ async function loadBusinessesList(){
   await saveBusinessesList();
 }
 async function saveBusinessesList(){
+  if(accessMode!=='owner') return;
   try{ await window.storage.set('businesses-list', JSON.stringify(BUSINESSES), true); }catch(e){}
 }
 async function loadAll(){
-  for(const b of BUSINESSES){ bizData[b.id] = await loadBiz(b.id); }
+  bizData = {};
+  for(const b of myBusinesses()){ bizData[b.id] = await loadBiz(b.id); }
 }
 async function loadOrder(){
   try{
-    const r = await window.storage.get('biz-order', true);
+    const orderKey = accessMode==='owner' ? 'biz-order' : ('biz-order-user:'+window.beAuth.getUserId());
+    const r = await window.storage.get(orderKey, true);
     if(r && r.value){ const d = JSON.parse(r.value);
       d.order = (d.order||[]).filter(id=>BUSINESSES.some(b=>b.id===id));
       BUSINESSES.forEach(b=>{ if(!d.order.includes(b.id)) d.order.push(b.id); });
@@ -132,11 +135,13 @@ async function loadOrder(){
   bizOrderState = { order: BUSINESSES.map(b=>b.id), autoSort: true };
 }
 async function saveOrder(){
-  try{ await window.storage.set('biz-order', JSON.stringify(bizOrderState), true); }catch(e){}
+  const orderKey = accessMode==='owner' ? 'biz-order' : ('biz-order-user:'+window.beAuth.getUserId());
+  try{ await window.storage.set(orderKey, JSON.stringify(bizOrderState), true); }catch(e){}
 }
 async function loadReminders(){
   try{
-    const r = await window.storage.get('reminders', true);
+    const reminderKey='reminders-user:'+window.beAuth.getUserId();
+    const r = await window.storage.get(reminderKey, true);
     if(r && r.value){
       reminders = JSON.parse(r.value);
       reminders.forEach(rm=>{ rm.history = rm.history || []; rm.days = rm.days || []; rm.active = rm.active !== false; rm.snoozeUntil = rm.snoozeUntil || null; rm.snoozeFiredFor = rm.snoozeFiredFor || null; });
@@ -146,11 +151,13 @@ async function loadReminders(){
   reminders = [];
 }
 async function saveReminders(){
-  try{ await window.storage.set('reminders', JSON.stringify(reminders), true); }catch(e){ showToast('Save failed'); }
+  const reminderKey='reminders-user:'+window.beAuth.getUserId();
+  try{ await window.storage.set(reminderKey, JSON.stringify(reminders), true); }catch(e){ showToast('Save failed'); }
 }
 async function loadLog(){
   try{
-    const r = await window.storage.get('reminder-log', true);
+    const logKey='reminder-log-user:'+window.beAuth.getUserId();
+    const r = await window.storage.get(logKey, true);
     if(r && r.value){ reminderLog = JSON.parse(r.value); return; }
   }catch(e){}
   reminderLog = [];
@@ -158,7 +165,8 @@ async function loadLog(){
 async function saveLog(){
   try{
     if(reminderLog.length>150) reminderLog = reminderLog.slice(0,150);
-    await window.storage.set('reminder-log', JSON.stringify(reminderLog), true);
+    const logKey='reminder-log-user:'+window.beAuth.getUserId();
+    await window.storage.set(logKey, JSON.stringify(reminderLog), true);
   }catch(e){}
 }
 async function loadFx(){
@@ -173,59 +181,35 @@ async function saveFx(){
 }
 function toRM(amount, currency){ return Number(amount) * (fxRates[currency]!==undefined ? fxRates[currency] : 1); }
 
-let accessMode = null;      // 'owner' | 'collaborator'
+let accessMode = null;      // 'owner' | 'collaborator' — determined only by Supabase profile
 let myEmail = '';
-let allowedBizIds = null;   // array of business ids for a collaborator; null = unrestricted (owner)
-let ownerPasscode = null;
-let collaborators = [];     // shared: [{id, email, name, businessIds:[], status:'pending'|'approved', requestedAt, approvedAt}]
+let allowedBizIds = null;
+let collaborators = [];
 let ownerProfile = {name:'', email:'', phone:''};
 let myAvatar = '';
 let sidebarBizOpen = false;
 function myBusinesses(){ return accessMode==='owner' ? BUSINESSES : BUSINESSES.filter(b=> (allowedBizIds||[]).includes(b.id)); }
 function updateBizCountBadge(){
-  const el = document.getElementById('bizCountBadge');
-  if(!el) return;
-  const n = myBusinesses().length;
-  el.textContent = accessMode==='owner' ? (n+' Businesses') : (n+' Business'+(n===1?'':'es')+' (yours)');
+  const el=document.getElementById('bizCountBadge'); if(!el)return;
+  const n=myBusinesses().length; el.textContent=n+' Business'+(n===1?'':'es');
 }
 function canAccessBiz(id){ return accessMode==='owner' || (allowedBizIds||[]).includes(id); }
-function reminderVisibleToMe(r){ return accessMode==='owner' || (r.business && (allowedBizIds||[]).includes(r.business)); }
-
-async function loadOwnerPasscode(){
-  try{ const r = await window.storage.get('owner-passcode', true); if(r && r.value) return r.value; }catch(e){}
-  return null;
-}
-async function saveOwnerPasscode(pass){
-  try{ await window.storage.set('owner-passcode', pass, true); }catch(e){}
-}
+function reminderVisibleToMe(r){ return accessMode==='owner' || !r.business || (allowedBizIds||[]).includes(r.business); }
 async function loadCollaborators(){
-  try{ const r = await window.storage.get('collaborators', true); if(r && r.value) return JSON.parse(r.value); }catch(e){}
-  return [];
+  try{ return accessMode==='owner' ? await window.beAuth.listCollaborators() : []; }catch(e){ console.warn(e); return []; }
 }
-async function saveCollaboratorsList(){
-  try{ await window.storage.set('collaborators', JSON.stringify(collaborators), true); }catch(e){}
-}
+async function saveCollaboratorsList(){ collaborators = await loadCollaborators(); }
 async function loadOwnerProfile(){
-  try{ const r = await window.storage.get('owner-profile', true); if(r && r.value) return JSON.parse(r.value); }catch(e){}
-  return {name:'', email:'', phone:''};
+  const p=window.beAuth.getProfile?.();
+  return p ? {name:p.name||'',email:p.email||'',phone:p.phone||''} : {name:'',email:'',phone:''};
 }
 async function saveOwnerProfileData(){
-  try{ await window.storage.set('owner-profile', JSON.stringify(ownerProfile), true); }catch(e){}
+  const p=await window.beAuth.updateMyProfile(ownerProfile.name,ownerProfile.phone);
+  ownerProfile={name:p.name||'',email:p.email||'',phone:p.phone||''};
 }
-async function loadAvatar(){
-  try{ const r = await window.storage.get('my-avatar', false); if(r && r.value) return r.value; }catch(e){}
-  return '';
-}
-async function saveAvatarData(dataUrl){
-  try{ await window.storage.set('my-avatar', dataUrl, false); }catch(e){}
-}
-async function loadMySession(){
-  try{ const r = await window.storage.get('my-session', false); if(r && r.value) return JSON.parse(r.value); }catch(e){}
-  return null;
-}
-async function saveMySession(session){
-  try{ await window.storage.set('my-session', JSON.stringify(session), false); }catch(e){}
-}
+function avatarKey(){ return 'my-avatar:'+window.beAuth.getUserId(); }
+async function loadAvatar(){ try{const r=await window.storage.get(avatarKey(),false);if(r&&r.value)return r.value}catch(e){} return ''; }
+async function saveAvatarData(dataUrl){ try{await window.storage.set(avatarKey(),dataUrl,false)}catch(e){} }
 function currencyTriple(totalRM){
   return { RM: totalRM, USD: totalRM/(fxRates.USD||1), PKR: totalRM/(fxRates.PKR||1) };
 }
@@ -1045,296 +1029,133 @@ document.getElementById('backBtn').addEventListener('click', ()=>{
 });
 document.getElementById('reminderBtn').addEventListener('click', openReminders);
 
-/* ===================== ACCESS GATE (Owner / Collaborator) ===================== */
-function renderGate(mode){
-  document.getElementById('sessionBar').style.display = 'none';
-  document.getElementById('collabBtn').style.display = 'none';
-  document.getElementById('reminderBtn').style.display = 'none';
-  document.getElementById('bizCountBadge').style.display = 'none';
-  document.getElementById('signOutBtn').style.display = 'none';
-  document.getElementById('backBtn').style.display = 'none';
-  document.getElementById('fabReminder').style.display = 'none';
-  document.getElementById('pageHeading').style.display = 'none';
-  document.getElementById('pageTitle').textContent = 'Business Empire';
-  document.getElementById('pageSub').textContent = 'Sign in to continue';
-
-  if(!ownerPasscode){
-    document.getElementById('app').innerHTML = `
-    <div class="gate-wrap"><div class="gate-card">
-      <h2>🔐 First-time Setup</h2>
-      <p>Koi Owner Passcode set nahi hai abhi tak. Ye passcode aap (Shahid) hamesha dashboard kholne ke liye use karenge, aur isi se collaborators approve karenge.</p>
-      <div class="modal-field" style="text-align:left"><label>Create Owner Passcode</label><input type="password" id="setupPass1" placeholder="e.g. a memorable phrase"></div>
-      <div class="modal-field" style="text-align:left"><label>Confirm Passcode</label><input type="password" id="setupPass2" placeholder="Retype it"></div>
-      <button class="btn" style="width:100%; margin-top:6px" onclick="doOwnerSetup()">Create & Enter Dashboard</button>
-    </div></div>`;
-    return;
-  }
-
-  if(mode==='owner'){
-    document.getElementById('app').innerHTML = `
-    <div class="gate-wrap"><div class="gate-card">
-      <h2>🔑 Owner Sign-in</h2>
-      <p>Apna Owner Passcode daalein.</p>
-      <div class="modal-field" style="text-align:left"><input type="password" id="ownerPassInput" placeholder="Owner Passcode"></div>
-      <button class="btn" style="width:100%; margin-top:6px" onclick="tryOwnerLogin()">Enter Dashboard</button>
-      <span class="gate-back" onclick="renderGate()">← Back</span>
-    </div></div>`;
-    return;
-  }
-  if(mode==='collab'){
-    document.getElementById('app').innerHTML = `
-    <div class="gate-wrap"><div class="gate-card">
-      <h2>🙋 Collaborator Sign-in</h2>
-      <p>Apni email daalein jo aapko business owner se milegi/di gayi hai.</p>
-      <div class="modal-field" style="text-align:left"><input type="email" id="collabEmailInput" placeholder="you@example.com"></div>
-      <button class="btn" style="width:100%; margin-top:6px" onclick="tryCollabLogin()">Continue</button>
-      <span class="gate-back" onclick="renderGate()">← Back</span>
-    </div></div>`;
-    return;
-  }
-  // default choice screen
-  document.getElementById('app').innerHTML = `
+/* ===================== AUTH + ACCESS ===================== */
+function hideAppChrome(){
+  ['sessionBar','collabBtn','reminderBtn','bizCountBadge','signOutBtn','backBtn','fabReminder','pageHeading'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
+  document.getElementById('pageTitle').textContent='Business Empire';
+  document.getElementById('pageSub').textContent='Sign in to continue';
+}
+function renderGate(){
+  hideAppChrome();
+  const err=window.beAuth.getCallbackError?.();
+  document.getElementById('app').innerHTML=`
   <div class="gate-wrap"><div class="gate-card">
-    <h2>👋 Welcome</h2>
-    <p>Kaun sign in kar raha hai?</p>
-    <div class="gate-choice">
-      <div class="gate-btn" onclick="renderGate('owner')"><span class="ic">🔑</span> I'm the Owner (Shahid)</div>
-      <div class="gate-btn" onclick="renderGate('collab')"><span class="ic">🙋</span> I'm a Collaborator</div>
-    </div>
+    <h2>Business Empire</h2>
+    <p>Sign in with your registered email and password.</p>
+    ${err?`<div class="email-note" style="border-color:var(--red);color:var(--red);margin-bottom:14px">${esc2(err)}</div>`:''}
+    <div class="modal-field" style="text-align:left"><label>Email</label><input type="email" id="loginEmail" autocomplete="username" placeholder="you@example.com"></div>
+    <div class="modal-field" style="text-align:left"><label>Password</label><input type="password" id="loginPassword" autocomplete="current-password" placeholder="Password" onkeydown="if(event.key==='Enter') tryAuthLogin()"></div>
+    <button class="btn" id="loginBtn" style="width:100%;margin-top:6px" onclick="tryAuthLogin()">Login</button>
+    <span class="gate-back" onclick="renderForgotPassword()">Forgot Password?</span>
+    <div class="email-note" style="margin-top:18px">Accounts are invitation-only. If you need access, ask the dashboard owner to invite your email.</div>
   </div></div>`;
 }
-async function doOwnerSetup(){
-  const p1 = document.getElementById('setupPass1').value.trim();
-  const p2 = document.getElementById('setupPass2').value.trim();
-  if(!p1 || p1.length<4){ showToast('Passcode kam se kam 4 characters ka rakhein'); return; }
-  if(p1!==p2){ showToast('Passcode match nahi hua'); return; }
-  await saveOwnerPasscode(p1);
-  ownerPasscode = p1;
-  await saveMySession({role:'owner'});
-  accessMode = 'owner'; allowedBizIds = null;
-  proceedToApp();
+async function tryAuthLogin(){
+  const email=document.getElementById('loginEmail')?.value.trim();
+  const password=document.getElementById('loginPassword')?.value||'';
+  if(!email||!email.includes('@')){showToast('Valid email daalein');return}
+  if(!password){showToast('Password daalein');return}
+  const btn=document.getElementById('loginBtn'); if(btn){btn.disabled=true;btn.textContent='Signing in…'}
+  try{
+    await window.beAuth.signIn(email,password);
+    await startAuthenticatedApp();
+  }catch(e){ showToast(e.message||'Login failed'); if(btn){btn.disabled=false;btn.textContent='Login'} }
 }
-async function tryOwnerLogin(){
-  const p = document.getElementById('ownerPassInput').value.trim();
-  if(p !== ownerPasscode){ showToast('Galat passcode'); return; }
-  await saveMySession({role:'owner'});
-  accessMode = 'owner'; allowedBizIds = null;
-  proceedToApp();
-}
-async function tryCollabLogin(){
-  const email = document.getElementById('collabEmailInput').value.trim().toLowerCase();
-  if(!email || !email.includes('@')){ showToast('Valid email daalein'); return; }
-  const entry = collaborators.find(c=>c.email.toLowerCase()===email);
-  if(entry && entry.status==='approved'){
-    await saveMySession({role:'collaborator', email});
-    accessMode='collaborator'; myEmail=email; allowedBizIds = entry.businessIds;
-    proceedToApp();
-  } else if(entry && entry.status==='pending'){
-    await saveMySession({role:'collaborator', email});
-    renderPendingScreen(email);
-  } else {
-    renderRequestAccessScreen(email);
-  }
-}
-function renderPendingScreen(email){
-  document.getElementById('app').innerHTML = `
-  <div class="gate-wrap"><div class="gate-card">
-    <h2>⏳ Waiting for Approval</h2>
-    <p>Aapki request (<b style="color:var(--text)">${email}</b>) owner ko bhej di gayi hai. Jaise hi approve hogi, aap sign in kar sakenge.</p>
-    <button class="btn" style="width:100%" onclick="tryCollabLogin_check('${email}')">🔄 Check Again</button>
-    <span class="gate-back" onclick="signOut()">← Use a different email</span>
+function renderForgotPassword(){
+  hideAppChrome();
+  document.getElementById('app').innerHTML=`<div class="gate-wrap"><div class="gate-card">
+    <h2>Reset Password</h2><p>Enter your registered email. A secure reset link will be emailed to you.</p>
+    <div class="modal-field" style="text-align:left"><label>Email</label><input type="email" id="resetEmail" placeholder="you@example.com"></div>
+    <button class="btn" id="resetBtn" style="width:100%" onclick="sendResetEmail()">Send Reset Email</button>
+    <span class="gate-back" onclick="renderGate()">← Back to Login</span>
   </div></div>`;
 }
-async function tryCollabLogin_check(email){
-  collaborators = await loadCollaborators();
-  const entry = collaborators.find(c=>c.email.toLowerCase()===email.toLowerCase());
-  if(entry && entry.status==='approved'){
-    accessMode='collaborator'; myEmail=email; allowedBizIds = entry.businessIds;
-    proceedToApp();
-  } else {
-    showToast('Abhi tak approve nahi hui — thodi der baad try karein');
-  }
+async function sendResetEmail(){
+  const email=document.getElementById('resetEmail')?.value.trim(); if(!email||!email.includes('@')){showToast('Valid email daalein');return}
+  const btn=document.getElementById('resetBtn'); if(btn){btn.disabled=true;btn.textContent='Sending…'}
+  try{await window.beAuth.sendPasswordReset(email);document.getElementById('app').innerHTML=`<div class="gate-wrap"><div class="gate-card"><h2>Check Your Email</h2><p>Password reset link <b style="color:var(--text)">${esc2(email)}</b> par bhej diya gaya hai.</p><button class="btn" style="width:100%" onclick="renderGate()">Back to Login</button></div></div>`}catch(e){showToast(e.message||'Email send failed');if(btn){btn.disabled=false;btn.textContent='Send Reset Email'}}
 }
-function renderRequestAccessScreen(email){
-  document.getElementById('app').innerHTML = `
-  <div class="gate-wrap"><div class="gate-card">
-    <h2>📨 Request Access</h2>
-    <p>Aap system mein nahi hain. Batayein kis business (ya businesses) ka access chahiye — owner ko request chali jayegi.</p>
-    <div class="modal-field" style="text-align:left"><label>Your Name (optional)</label><input type="text" id="reqName" placeholder="e.g. Ali — DP Team"></div>
-    <div class="biz-check-list">
-      ${BUSINESSES.map(b=>`<label class="biz-check-item"><input type="checkbox" value="${b.id}" class="reqBizChk"> ${b.icon} ${b.name}</label>`).join('')}
-    </div>
-    <button class="btn" style="width:100%; margin-top:10px" onclick="submitAccessRequest('${email}')">Send Request</button>
-    <span class="gate-back" onclick="signOut()">← Use a different email</span>
+function renderSetPasswordScreen(type){
+  hideAppChrome();
+  const title=type==='recovery'?'Set New Password':'Set Your Password';
+  const note=type==='recovery'?'Create a new password for your account.':'Your invitation is confirmed. Create your password to activate your account.';
+  document.getElementById('app').innerHTML=`<div class="gate-wrap"><div class="gate-card">
+    <h2>${title}</h2><p>${note}</p>
+    <div class="modal-field" style="text-align:left"><label>New Password</label><input type="password" id="setPass1" autocomplete="new-password" placeholder="Minimum 8 characters"></div>
+    <div class="modal-field" style="text-align:left"><label>Confirm Password</label><input type="password" id="setPass2" autocomplete="new-password" placeholder="Retype password" onkeydown="if(event.key==='Enter') completePasswordSetup()"></div>
+    <button class="btn" id="setPassBtn" style="width:100%" onclick="completePasswordSetup()">Save Password</button>
   </div></div>`;
 }
-async function submitAccessRequest(email){
-  const chosen = Array.from(document.querySelectorAll('.reqBizChk:checked')).map(el=>el.value);
-  const name = document.getElementById('reqName').value.trim();
-  if(chosen.length===0){ showToast('Kam se kam ek business select karein'); return; }
-  collaborators = await loadCollaborators();
-  collaborators.push({id:uid(), email, name, businessIds:chosen, status:'pending', requestedAt:nowISO(), history:[]});
-  await saveCollaboratorsList();
-  await saveMySession({role:'collaborator', email});
-  renderPendingScreen(email);
-  showToast('Request bhej di gayi');
+async function completePasswordSetup(){
+  const p1=document.getElementById('setPass1')?.value||'',p2=document.getElementById('setPass2')?.value||'';
+  if(p1.length<8){showToast('Password kam se kam 8 characters ka rakhein');return}
+  if(p1!==p2){showToast('Passwords match nahi kar rahe');return}
+  const btn=document.getElementById('setPassBtn'); if(btn){btn.disabled=true;btn.textContent='Saving…'}
+  try{await window.beAuth.updatePassword(p1);showToast('Password set ✅');await startAuthenticatedApp()}catch(e){showToast(e.message||'Password set failed');if(btn){btn.disabled=false;btn.textContent='Save Password'}}
 }
 async function signOut(){
-  await saveMySession({});
-  accessMode=null; myEmail=''; allowedBizIds=null;
-  renderGate();
+  try{await window.beAuth.signOut()}catch(e){}
+  accessMode=null;myEmail='';allowedBizIds=null;collaborators=[];bizData={};reminders=[];reminderLog=[];closeSidebar();renderGate();
 }
-
+async function startAuthenticatedApp(){
+  const p=window.beAuth.getProfile();
+  if(!p){renderGate();return}
+  accessMode=p.role==='owner'?'owner':'collaborator';
+  myEmail=p.email||window.beAuth.getUser()?.email||'';
+  allowedBizIds=accessMode==='owner'?null:window.beAuth.getBusinessIds();
+  ownerProfile={name:p.name||'',email:myEmail,phone:p.phone||''};
+  await loadBusinessesList();
+  await Promise.all([loadAll(),loadOrder(),loadReminders(),loadLog(),loadFx()]);
+  collaborators=await loadCollaborators();
+  myAvatar=await loadAvatar();
+  proceedToApp();
+}
 function proceedToApp(){
-  document.getElementById('reminderBtn').style.display = 'flex';
-  document.getElementById('signOutBtn').style.display = 'flex';
-  document.getElementById('fabReminder').style.display = 'flex';
-  document.getElementById('bizCountBadge').style.display = 'flex';
-  document.getElementById('pageHeading').style.display = 'block';
-  const sb = document.getElementById('sessionBar');
-  sb.style.display = 'flex';
-  sb.innerHTML = accessMode==='owner' ? 'Signed in as <b>Owner</b>' : `Signed in as <b>${myEmail}</b> (Collaborator)`;
-  if(accessMode==='owner'){
-    document.getElementById('collabBtn').style.display = 'flex';
-    updateCollabBadge();
-  }
+  document.getElementById('reminderBtn').style.display='flex';
+  document.getElementById('signOutBtn').style.display='flex';
+  document.getElementById('fabReminder').style.display='flex';
+  document.getElementById('bizCountBadge').style.display='flex';
+  document.getElementById('pageHeading').style.display='block';
+  const sb=document.getElementById('sessionBar');sb.style.display='flex';sb.innerHTML=`Signed in as <b>${esc2(ownerProfile.name||myEmail)}</b>`;
+  if(accessMode==='owner'){document.getElementById('collabBtn').style.display='flex';updateCollabBadge()}else document.getElementById('collabBtn').style.display='none';
   renderDashboard();
 }
 
 /* ===================== COLLABORATORS MANAGEMENT (Owner only) ===================== */
-function updateCollabBadge(){
-  const badge = document.getElementById('collabBadge');
-  if(!badge) return;
-  const pending = collaborators.filter(c=>c.status==='pending').length;
-  badge.textContent = pending;
-  badge.classList.toggle('zero', pending===0);
-  if(pending>0) badge.style.background = 'var(--red)';
-}
-function openCollaborators(){
-  if(accessMode!=='owner') return;
-  currentView = 'collaborators';
-  currentBiz = null;
-  renderCollaborators();
-}
+function updateCollabBadge(){const badge=document.getElementById('collabBadge');if(!badge)return;const pending=collaborators.filter(c=>c.status==='invited').length;badge.textContent=pending;badge.classList.toggle('zero',pending===0);if(pending>0)badge.style.background='var(--gold)'}
+function openCollaborators(){if(accessMode!=='owner')return;currentView='collaborators';currentBiz=null;renderCollaborators()}
 function renderCollaborators(){
-  currentView = 'collaborators';
-  document.getElementById('pageHeading').style.display = 'block';
-  document.getElementById('pageTitle').textContent = 'Collaborators';
-  document.getElementById('pageSub').textContent = 'Kis ko kaunsa business dikhna chahiye — manage yahan se karein';
-  document.getElementById('backBtn').style.display = 'flex';
-
-  const pending = collaborators.filter(c=>c.status==='pending');
-  const approved = collaborators.filter(c=>c.status==='approved');
-
-  function bizNames(ids){ return (ids||[]).map(id=> BUSINESSES.find(b=>b.id===id)?.name || id).join(', ') || '—'; }
-
-  let html = `
-  <div class="rem-toprow">
-    <button class="btn" onclick="openAddCollaboratorModal()">+ Add Collaborator Directly</button>
-  </div>
-  <div class="rem-section-title">🟡 Pending Requests (${pending.length})</div>
-  ${pending.length? pending.map(c=>`<div class="rem-item">
-      <div class="rem-body">
-        <div class="rem-title">${esc2(c.email)} ${c.name?'· '+esc2(c.name):''}</div>
-        <div class="rem-sub">Requested access: ${bizNames(c.businessIds)} · ${fmtDateTime(c.requestedAt)}</div>
-      </div>
-      <div class="row-actions">
-        <button class="btn" style="background:var(--green)" onclick="approveCollaborator('${c.id}')">Approve</button>
-        <button class="btn-ghost" onclick="rejectCollaborator('${c.id}')">Reject</button>
-      </div>
-    </div>`).join('') : `<div class="empty-state" style="padding:24px; color:var(--sub)">Koi pending request nahi hai</div>`}
-
-  <div class="rem-section-title">✅ Approved Collaborators (${approved.length})</div>
-  ${approved.length? approved.map(c=>`<div class="rem-item">
-      <div class="rem-body">
-        <div class="rem-title">${esc2(c.email)} ${c.name?'· '+esc2(c.name):''}</div>
-        <div class="rem-sub">Access: ${bizNames(c.businessIds)}</div>
-      </div>
-      <div class="row-actions">
-        <button class="btn-ghost" onclick="editCollaboratorAccess('${c.id}')">Edit Access</button>
-        <button class="btn-ghost" onclick="revokeCollaborator('${c.id}')">Revoke</button>
-      </div>
-    </div>`).join('') : `<div class="empty-state" style="padding:24px; color:var(--sub)">Koi approved collaborator nahi hai abhi tak</div>`}`;
-
-  document.getElementById('app').innerHTML = html;
+  currentView='collaborators';document.getElementById('pageHeading').style.display='block';document.getElementById('pageTitle').textContent='Collaborators';document.getElementById('pageSub').textContent='Invite users and control which businesses they can access';document.getElementById('backBtn').style.display='flex';
+  const invited=collaborators.filter(c=>c.status==='invited'),active=collaborators.filter(c=>c.status==='active'),disabled=collaborators.filter(c=>c.status==='disabled');
+  const bizNames=ids=>(ids||[]).map(id=>BUSINESSES.find(b=>b.id===id)?.name||id).join(', ')||'—';
+  const card=(c,statusLabel,buttons)=>`<div class="rem-item"><div class="rem-body"><div class="rem-title">${esc2(c.name||c.email)}</div><div class="rem-sub">${esc2(c.email)} · ${statusLabel}<br>Access: ${esc2(bizNames(c.businessIds))}${c.lastLoginAt?`<br>Last login: ${fmtDateTime(c.lastLoginAt)}`:''}</div></div><div class="row-actions">${buttons}</div></div>`;
+  document.getElementById('app').innerHTML=`<div class="rem-toprow"><button class="btn" onclick="openAddCollaboratorModal()">+ Add Collaborator</button></div>
+    <div class="rem-section-title">✉️ Invited (${invited.length})</div>${invited.length?invited.map(c=>card(c,'Invitation sent',`<button class="btn-ghost" onclick="resendCollaboratorInvite('${c.id}')">Resend Invite</button><button class="btn-ghost" onclick="editCollaboratorAccess('${c.id}')">Edit Access</button><button class="btn-ghost" onclick="removeCollaborator('${c.id}')">Remove</button>`)).join(''):'<div class="empty-state" style="padding:24px">No pending invitations</div>'}
+    <div class="rem-section-title">✅ Active (${active.length})</div>${active.length?active.map(c=>card(c,'Active',`<button class="btn-ghost" onclick="editCollaboratorAccess('${c.id}')">Edit Access</button><button class="btn-ghost" onclick="disableCollaborator('${c.id}')">Disable</button><button class="btn-ghost" onclick="removeCollaborator('${c.id}')">Remove</button>`)).join(''):'<div class="empty-state" style="padding:24px">No active collaborators yet</div>'}
+    ${disabled.length?`<div class="rem-section-title">⛔ Disabled (${disabled.length})</div>${disabled.map(c=>card(c,'Disabled',`<button class="btn-ghost" onclick="removeCollaborator('${c.id}')">Remove</button>`)).join('')}`:''}`;
   updateCollabBadge();
 }
-async function approveCollaborator(id){
-  const c = collaborators.find(x=>x.id===id);
-  if(!c) return;
-  c.status = 'approved'; c.approvedAt = nowISO();
-  await saveCollaboratorsList();
-  showToast('Collaborator approved ✅');
-  renderCollaborators();
-}
-async function rejectCollaborator(id){
-  openConfirm('Ye request reject kar dein?', async ()=>{
-    collaborators = collaborators.filter(x=>x.id!==id);
-    await saveCollaboratorsList();
-    renderCollaborators();
-    showToast('Request rejected');
-  }, {label:'Yes, Reject'});
-}
-async function revokeCollaborator(id){
-  openConfirm('Is collaborator ki access hata dein?', async ()=>{
-    collaborators = collaborators.filter(x=>x.id!==id);
-    await saveCollaboratorsList();
-    renderCollaborators();
-    showToast('Access revoked');
-  }, {label:'Yes, Revoke'});
-}
-function editCollaboratorAccess(id){
-  const c = collaborators.find(x=>x.id===id);
-  if(!c) return;
-  openModal(`
-    <h3>Edit Access — ${esc2(c.email)} <span class="modal-close" onclick="closeModal()">✕</span></h3>
-    <div class="biz-check-list">
-      ${BUSINESSES.map(b=>`<label class="biz-check-item"><input type="checkbox" value="${b.id}" class="editBizChk" ${c.businessIds.includes(b.id)?'checked':''}> ${b.icon} ${b.name}</label>`).join('')}
-    </div>
-    <div class="modal-actions">
-      <button class="btn" onclick="saveCollaboratorAccess('${id}')">Save</button>
-      <button class="btn-ghost" onclick="closeModal()">Cancel</button>
-    </div>`);
-}
-function saveCollaboratorAccess(id){
-  const c = collaborators.find(x=>x.id===id);
-  if(!c) return;
-  const chosen = Array.from(document.querySelectorAll('.editBizChk:checked')).map(el=>el.value);
-  if(chosen.length===0){ showToast('Kam se kam ek business select karein'); return; }
-  openConfirm('Is collaborator ki access update kar dein?', async ()=>{
-    c.businessIds = chosen;
-    await saveCollaboratorsList();
-    closeModal();
-    renderCollaborators();
-    showToast('Access updated');
-  }, {label:'Yes, Update', danger:false});
-}
+async function refreshCollaborators(){collaborators=await loadCollaborators();if(currentView==='collaborators')renderCollaborators();else updateCollabBadge()}
 function openAddCollaboratorModal(){
-  openModal(`
-    <h3>Add Collaborator Directly <span class="modal-close" onclick="closeModal()">✕</span></h3>
+  openModal(`<h3>Add Collaborator <span class="modal-close" onclick="closeModal()">✕</span></h3>
+    <div class="modal-field"><label>Name</label><input type="text" id="newCollabName" placeholder="e.g. Ali"></div>
     <div class="modal-field"><label>Email</label><input type="email" id="newCollabEmail" placeholder="collaborator@example.com"></div>
-    <div class="modal-field"><label>Name (optional)</label><input type="text" id="newCollabName" placeholder="e.g. Ali — DP Team"></div>
-    <div class="biz-check-list">
-      ${BUSINESSES.map(b=>`<label class="biz-check-item"><input type="checkbox" value="${b.id}" class="newCollabChk"> ${b.icon} ${b.name}</label>`).join('')}
-    </div>
-    <div class="modal-actions">
-      <button class="btn" onclick="saveNewCollaborator()">Add — pre-approved</button>
-      <button class="btn-ghost" onclick="closeModal()">Cancel</button>
-    </div>`);
+    <div class="mini-label">Business Access</div><div class="biz-check-list">${BUSINESSES.map(b=>`<label class="biz-check-item"><input type="checkbox" value="${b.id}" class="newCollabChk"> ${b.icon} ${b.name}</label>`).join('')}</div>
+    <div class="email-note">An invitation email will be sent automatically. The user must open it and set a password before logging in.</div>
+    <div class="modal-actions"><button class="btn" id="inviteCollabBtn" onclick="saveNewCollaborator()">Send Invitation</button><button class="btn-ghost" onclick="closeModal()">Cancel</button></div>`)
 }
 async function saveNewCollaborator(){
-  const email = document.getElementById('newCollabEmail').value.trim().toLowerCase();
-  const name = document.getElementById('newCollabName').value.trim();
-  const chosen = Array.from(document.querySelectorAll('.newCollabChk:checked')).map(el=>el.value);
-  if(!email || !email.includes('@')){ showToast('Valid email daalein'); return; }
-  if(chosen.length===0){ showToast('Kam se kam ek business select karein'); return; }
-  if(collaborators.some(c=>c.email.toLowerCase()===email)){ showToast('Ye email pehle se list mein hai'); return; }
-  collaborators.push({id:uid(), email, name, businessIds:chosen, status:'approved', requestedAt:nowISO(), approvedAt:nowISO(), history:[]});
-  await saveCollaboratorsList();
-  closeModal();
-  renderCollaborators();
-  showToast('Collaborator added ✅ — inhe email/URL bata dein sign in karne ke liye');
+  const email=document.getElementById('newCollabEmail').value.trim().toLowerCase(),name=document.getElementById('newCollabName').value.trim();
+  const chosen=Array.from(document.querySelectorAll('.newCollabChk:checked')).map(el=>el.value);
+  if(!email||!email.includes('@')){showToast('Valid email daalein');return}if(!name){showToast('Name daalein');return}if(!chosen.length){showToast('Kam se kam ek business select karein');return}
+  const btn=document.getElementById('inviteCollabBtn');if(btn){btn.disabled=true;btn.textContent='Sending…'}
+  try{await window.beAuth.manageCollaborator({action:'invite',email,name,businessIds:chosen});closeModal();await refreshCollaborators();showToast('Invitation email sent ✅')}catch(e){showToast(e.message||'Invite failed');if(btn){btn.disabled=false;btn.textContent='Send Invitation'}}
 }
+function editCollaboratorAccess(id){const c=collaborators.find(x=>x.id===id);if(!c)return;openModal(`<h3>Edit Access — ${esc2(c.name||c.email)} <span class="modal-close" onclick="closeModal()">✕</span></h3><div class="modal-field"><label>Name</label><input type="text" id="editCollabName" value="${esc(c.name||'')}"></div><div class="biz-check-list">${BUSINESSES.map(b=>`<label class="biz-check-item"><input type="checkbox" value="${b.id}" class="editBizChk" ${(c.businessIds||[]).includes(b.id)?'checked':''}> ${b.icon} ${b.name}</label>`).join('')}</div><div class="modal-actions"><button class="btn" onclick="saveCollaboratorAccess('${id}')">Save</button><button class="btn-ghost" onclick="closeModal()">Cancel</button></div>`)}
+async function saveCollaboratorAccess(id){const c=collaborators.find(x=>x.id===id);if(!c)return;const chosen=Array.from(document.querySelectorAll('.editBizChk:checked')).map(el=>el.value),name=document.getElementById('editCollabName').value.trim();if(!chosen.length){showToast('Kam se kam ek business select karein');return}try{await window.beAuth.manageCollaborator({action:'update_access',userId:id,name,businessIds:chosen});closeModal();await refreshCollaborators();showToast('Access updated ✅')}catch(e){showToast(e.message||'Update failed')}}
+async function resendCollaboratorInvite(id){openConfirm('Fresh invitation email dobara bhej dein?',async()=>{try{await window.beAuth.manageCollaborator({action:'resend_invite',userId:id});await refreshCollaborators();showToast('Fresh invitation sent ✅')}catch(e){showToast(e.message||'Resend failed')}},{label:'Yes, Resend',danger:false})}
+async function disableCollaborator(id){openConfirm('Is collaborator ka login disable kar dein?',async()=>{try{await window.beAuth.manageCollaborator({action:'disable',userId:id});await refreshCollaborators();showToast('Collaborator disabled')}catch(e){showToast(e.message||'Disable failed')}},{label:'Yes, Disable'})}
+async function removeCollaborator(id){openConfirm('Is collaborator ko permanently remove kar dein?',async()=>{try{await window.beAuth.manageCollaborator({action:'remove',userId:id});await refreshCollaborators();showToast('Collaborator removed')}catch(e){showToast(e.message||'Remove failed')}},{label:'Yes, Remove'})}
 
 /* ===================== THEME (Light / Dark) ===================== */
 async function applySavedTheme(){
@@ -1360,7 +1181,7 @@ function closeSidebar(){
 }
 function renderSidebarContent(){
   const isLight = document.body.classList.contains('light-theme');
-  const myName = accessMode==='owner' ? (ownerProfile.name || 'Shahid') : ((collaborators.find(c=>c.email===myEmail)||{}).name || myEmail);
+  const myName = ownerProfile.name || myEmail;
   const initial = (myName||'?').trim().charAt(0).toUpperCase();
   const avatarInner = myAvatar ? `<img src="${myAvatar}" alt="avatar">` : `<span>${initial}</span>`;
 
@@ -1374,7 +1195,7 @@ function renderSidebarContent(){
       <input type="file" id="avatarFileInput" accept="image/*" style="display:none" onchange="handleAvatarUpload(event)">
       <div>
         <div class="menu-name">${esc2(myName)}</div>
-        <div class="menu-sub">${accessMode==='owner' ? '🔑 Owner' : '🙋 Collaborator'}</div>
+        <div class="menu-sub">${esc2(myEmail)}</div>
       </div>
     </div>
 
@@ -1405,7 +1226,7 @@ function renderSidebarContent(){
       </div>
     </details>
 
-    <button class="menu-item" onclick="closeSidebar(); signOut();"><span class="mi-icon">🔓</span> Switch User</button>
+    <button class="menu-item" onclick="closeSidebar(); signOut();"><span class="mi-icon">🔓</span> Logout</button>
     <button class="menu-item" onclick="closeSidebar(); openAboutModal();"><span class="mi-icon">ℹ️</span> About App</button>
     <button class="menu-item" onclick="closeSidebar(); shareApp();"><span class="mi-icon">🔗</span> Share App</button>
   </div>`;
@@ -1536,76 +1357,17 @@ function confirmDeleteBusiness(id){
 
 /* ===================== PROFILE ===================== */
 function openProfileModal(){
-  if(accessMode==='owner'){
-    openModal(`
-      <h3>Edit Profile <span class="modal-close" onclick="closeModal()">✕</span></h3>
-      <div class="modal-field"><label>Name</label><input type="text" id="pf_name" placeholder="e.g. Shahid" value="${esc(ownerProfile.name||'')}"></div>
-      <div class="modal-field"><label>Email Address</label><input type="email" id="pf_email" placeholder="you@example.com" value="${esc(ownerProfile.email||'')}"></div>
-      <div class="modal-field"><label>Contact Number</label><input type="tel" id="pf_phone" placeholder="e.g. +60 12-345 6789" value="${esc(ownerProfile.phone||'')}"></div>
-      <div class="modal-actions">
-        <button class="btn" onclick="confirmSaveProfile()">Save Changes</button>
-        <button class="btn-ghost" onclick="closeModal()">Cancel</button>
-      </div>
-      <div style="border-top:1px solid var(--border); margin-top:18px; padding-top:16px">
-        <div class="mini-label">Security</div>
-        <button class="btn-ghost" style="width:100%" onclick="openPinResetModal()">🔑 Reset Owner Passcode</button>
-      </div>`);
-  } else {
-    const entry = collaborators.find(c=>c.email.toLowerCase()===myEmail.toLowerCase());
-    openModal(`
-      <h3>Edit Profile <span class="modal-close" onclick="closeModal()">✕</span></h3>
-      <div class="modal-field"><label>Name</label><input type="text" id="pf_name" placeholder="Your name" value="${esc(entry?entry.name||'':'')}"></div>
-      <div class="modal-field"><label>Contact Number</label><input type="tel" id="pf_phone" placeholder="e.g. +60 12-345 6789" value="${esc(entry?entry.phone||'':'')}"></div>
-      <div class="modal-field"><label>Email Address</label><input type="email" value="${esc(myEmail)}" disabled style="opacity:.6"></div>
-      <div style="font-size:11.5px; color:var(--sub); margin-bottom:14px">Email badalne ke liye "Switch User" se dobara sign in karein.</div>
-      <div class="modal-actions">
-        <button class="btn" onclick="confirmSaveProfile()">Save Changes</button>
-        <button class="btn-ghost" onclick="closeModal()">Cancel</button>
-      </div>`);
-  }
+  const p=window.beAuth.getProfile()||{};
+  openModal(`<h3>Edit Profile <span class="modal-close" onclick="closeModal()">✕</span></h3>
+    <div class="modal-field"><label>Name</label><input type="text" id="pf_name" value="${esc(p.name||'')}"></div>
+    <div class="modal-field"><label>Email Address</label><input type="email" value="${esc(p.email||myEmail)}" disabled style="opacity:.65"></div>
+    <div class="modal-field"><label>Contact Number</label><input type="tel" id="pf_phone" value="${esc(p.phone||'')}"></div>
+    <div class="modal-actions"><button class="btn" onclick="confirmSaveProfile()">Save Changes</button><button class="btn-ghost" onclick="closeModal()">Cancel</button></div>
+    <div style="border-top:1px solid var(--border);margin-top:18px;padding-top:16px"><div class="mini-label">Security</div><button class="btn-ghost" style="width:100%" onclick="openChangePasswordModal()">🔑 Change Password</button></div>`)
 }
-function confirmSaveProfile(){
-  const name = document.getElementById('pf_name').value.trim();
-  const phone = document.getElementById('pf_phone').value.trim();
-  const email = accessMode==='owner' ? document.getElementById('pf_email').value.trim() : null;
-  openConfirm('Profile changes save kar dein?', async ()=>{
-    if(accessMode==='owner'){
-      ownerProfile = {name, email: email||'', phone};
-      await saveOwnerProfileData();
-    } else {
-      const entry = collaborators.find(c=>c.email.toLowerCase()===myEmail.toLowerCase());
-      if(entry){ entry.name = name; entry.phone = phone; await saveCollaboratorsList(); }
-    }
-    closeModal();
-    renderSidebarContent();
-    showToast('Profile updated ✅');
-  }, {label:'Yes, Save Changes', danger:false});
-}
-function openPinResetModal(){
-  openModal(`
-    <h3>Reset Owner Passcode <span class="modal-close" onclick="closeModal()">✕</span></h3>
-    <div class="modal-field"><label>Current Passcode</label><input type="password" id="pin_current"></div>
-    <div class="modal-field"><label>New Passcode</label><input type="password" id="pin_new"></div>
-    <div class="modal-field"><label>Confirm New Passcode</label><input type="password" id="pin_confirm"></div>
-    <div class="modal-actions">
-      <button class="btn" onclick="confirmPinReset()">Reset Passcode</button>
-      <button class="btn-ghost" onclick="closeModal()">Cancel</button>
-    </div>`);
-}
-function confirmPinReset(){
-  const cur = document.getElementById('pin_current').value;
-  const n1 = document.getElementById('pin_new').value;
-  const n2 = document.getElementById('pin_confirm').value;
-  if(cur !== ownerPasscode){ showToast('Current passcode galat hai'); return; }
-  if(!n1 || n1.length<4){ showToast('Naya passcode kam se kam 4 characters ka rakhein'); return; }
-  if(n1 !== n2){ showToast('New passcode match nahi hua'); return; }
-  openConfirm('Passcode reset kar dein? Aapko agli baar naya passcode use karna hoga.', async ()=>{
-    ownerPasscode = n1;
-    await saveOwnerPasscode(n1);
-    closeModal();
-    showToast('Passcode reset ho gaya ✅');
-  }, {label:'Yes, Reset Passcode', danger:false});
-}
+function confirmSaveProfile(){const name=document.getElementById('pf_name').value.trim(),phone=document.getElementById('pf_phone').value.trim();openConfirm('Profile changes save kar dein?',async()=>{try{const p=await window.beAuth.updateMyProfile(name,phone);ownerProfile={name:p.name||'',email:p.email||myEmail,phone:p.phone||''};if(accessMode==='owner')collaborators=await loadCollaborators();closeModal();renderSidebarContent();showToast('Profile updated ✅')}catch(e){showToast(e.message||'Save failed')}},{label:'Yes, Save Changes',danger:false})}
+function openChangePasswordModal(){openModal(`<h3>Change Password <span class="modal-close" onclick="closeModal()">✕</span></h3><div class="modal-field"><label>New Password</label><input type="password" id="cp1" autocomplete="new-password"></div><div class="modal-field"><label>Confirm New Password</label><input type="password" id="cp2" autocomplete="new-password"></div><div class="modal-actions"><button class="btn" onclick="confirmChangePassword()">Update Password</button><button class="btn-ghost" onclick="closeModal()">Cancel</button></div>`)}
+async function confirmChangePassword(){const p1=document.getElementById('cp1').value,p2=document.getElementById('cp2').value;if(p1.length<8){showToast('Password kam se kam 8 characters ka rakhein');return}if(p1!==p2){showToast('Passwords match nahi kar rahe');return}try{await window.beAuth.updatePassword(p1);closeModal();showToast('Password updated ✅')}catch(e){showToast(e.message||'Password update failed')}}
 
 /* ===================== ABOUT / SHARE ===================== */
 function openAboutModal(){
@@ -1632,7 +1394,7 @@ function shareApp(){
       <button class="btn" onclick="copyShareLink()">📋 Copy Link</button>
       ${navigator.share ? `<button class="btn-ghost" onclick="nativeShareApp()">📤 Share via...</button>` : ''}
     </div>
-    <div class="email-note" style="margin-top:16px">Note: Naye sign-in karne wale "Collaborator" ke tor pe apni email daalein, aap unko owner ki taraf se approve karenge — is se wo sirf apna assigned business hi dekh sakenge.</div>`);
+    <div class="email-note" style="margin-top:16px">Access is invitation-only. Add a collaborator from the Collaborators page; they will receive an email to set their password.</div>`);
 }
 function copyShareLink(){
   const link = window.location.href;
@@ -1977,60 +1739,19 @@ document.addEventListener('visibilitychange', ()=>{
 });
 
 /* ===================== INIT ===================== */
-window.__BUSINESS_EMPIRE_APP_VERSION = '3.0.0';
+window.__BUSINESS_EMPIRE_APP_VERSION='4.0.0';
 (async function init(){
-  try {
-    await loadBusinessesList();
-    const results = await Promise.all([
-      loadAll(),
-      loadOrder(),
-      loadReminders(),
-      loadLog(),
-      loadFx(),
-      loadOwnerPasscode(),
-      loadCollaborators(),
-      loadOwnerProfile(),
-      loadAvatar(),
-      loadMySession()
-    ]);
-    ownerPasscode = results[5];
-    collaborators = results[6];
-    ownerProfile = results[7];
-    myAvatar = results[8];
-    const session = results[9];
+  try{
     await applySavedTheme();
-  if(session && session.role==='owner' && ownerPasscode){
-    accessMode='owner'; allowedBizIds=null;
-    proceedToApp();
-  } else if(session && session.role==='collaborator' && session.email){
-    const entry = collaborators.find(c=>c.email.toLowerCase()===session.email.toLowerCase());
-    if(entry && entry.status==='approved'){
-      accessMode='collaborator'; myEmail=session.email; allowedBizIds=entry.businessIds;
-      proceedToApp();
-    } else if(entry && entry.status==='pending'){
-      renderPendingScreen(session.email);
-    } else {
-      renderGate();
-    }
-  } else {
-    renderGate();
-  }
-
-    setInterval(checkReminders, 15000);
-    setInterval(updateReminderBadge, 30000);
-  } catch (err) {
-    console.error('[Business Empire] Startup failed:', err);
-    const appEl = document.getElementById('app');
-    if(appEl){
-      appEl.innerHTML = '<div class="gate-wrap"><div class="gate-card"><h2>App could not start</h2><p>Please refresh once. If this continues, check the browser console for the startup error.</p><button class="btn" onclick="location.reload()">Refresh App</button></div></div>';
-    }
-  }
+    const state=await window.beAuth.initialize();
+    if(!state.configured){document.getElementById('app').innerHTML='<div class="gate-wrap"><div class="gate-card"><h2>Setup Required</h2><p>Supabase configuration is missing.</p></div></div>';return}
+    if(window.beAuth.getCallbackError()){renderGate();return}
+    const cb=window.beAuth.getCallbackType();
+    if((cb==='invite'||cb==='recovery')&&window.beAuth.isAuthenticated()){renderSetPasswordScreen(cb);return}
+    if(!window.beAuth.isAuthenticated()){renderGate();return}
+    await startAuthenticatedApp();
+    setInterval(checkReminders,15000);setInterval(updateReminderBadge,30000);
+  }catch(err){console.error('[Business Empire] Startup failed:',err);document.getElementById('app').innerHTML='<div class="gate-wrap"><div class="gate-card"><h2>App could not start</h2><p>'+esc2(err.message||'Please refresh and try again.')+'</p><button class="btn" onclick="location.reload()">Refresh App</button></div></div>'}
 })();
+if('serviceWorker'in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('./service-worker.js?v=4').then(reg=>reg.update()).catch(err=>console.warn('[Business Empire] service worker failed:',err))})}
 
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./service-worker.js?v=3').then(reg => reg.update()).catch(err =>
-      console.warn('[Business Empire] Service worker registration failed:', err)
-    );
-  });
-}
