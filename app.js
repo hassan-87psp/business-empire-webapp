@@ -23,6 +23,58 @@ let bizData = {};      // id -> { transactions:[], categories:{expense:[],income
 let currentBiz = null;
 let currentTab = 'overview';
 let currentView = 'dashboard'; // 'dashboard' | 'business' | 'reminders'
+
+/* ===================== HOME + PWA ===================== */
+let deferredInstallPrompt = null;
+function isPwaStandalone(){
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+function goHome(){
+  closeSidebar();
+  currentBiz = null;
+  if(accessMode){
+    renderDashboard();
+    window.scrollTo({top:0, behavior:'smooth'});
+  } else {
+    renderGate();
+  }
+}
+async function installPWA(){
+  if(isPwaStandalone()){ showToast('Business Empire app already installed ✅'); return; }
+  if(deferredInstallPrompt){
+    const promptEvent = deferredInstallPrompt;
+    deferredInstallPrompt = null;
+    promptEvent.prompt();
+    try{
+      const choice = await promptEvent.userChoice;
+      if(choice && choice.outcome === 'accepted') showToast('App install started ✅');
+    }catch(e){}
+    renderSidebarContent();
+    return;
+  }
+  const isiOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if(isiOS){
+    openModal(`
+      <h3>📲 Install Business Empire <span class="modal-close" onclick="closeModal()">✕</span></h3>
+      <p style="font-size:13px; color:var(--sub); line-height:1.7">Safari mein <b>Share</b> button tap karein, phir <b>Add to Home Screen</b> select karein.</p>
+      <div class="modal-actions"><button class="btn" onclick="closeModal()">Got it</button></div>`);
+  } else {
+    openModal(`
+      <h3>📲 Install Business Empire <span class="modal-close" onclick="closeModal()">✕</span></h3>
+      <p style="font-size:13px; color:var(--sub); line-height:1.7">Browser menu mein <b>Install app</b> ya <b>Add to Home Screen</b> choose karein. Agar install option available hoga to browser usay show karega.</p>
+      <div class="modal-actions"><button class="btn" onclick="closeModal()">Got it</button></div>`);
+  }
+}
+window.addEventListener('beforeinstallprompt', (event)=>{
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  if(document.getElementById('sidebarContent')?.innerHTML) renderSidebarContent();
+});
+window.addEventListener('appinstalled', ()=>{
+  deferredInstallPrompt = null;
+  showToast('Business Empire installed ✅');
+  if(document.getElementById('sidebarContent')?.innerHTML) renderSidebarContent();
+});
 let bizOrderState = { order: BUSINESSES.map(b=>b.id), autoSort: true };
 let reminders = [];
 let reminderLog = [];
@@ -1326,6 +1378,10 @@ function renderSidebarContent(){
       </div>
     </div>
 
+    <button class="menu-item accent" onclick="goHome();"><span class="mi-icon">🏠</span> Home</button>
+
+    ${!isPwaStandalone() ? `<button class="menu-item" onclick="closeSidebar(); installPWA();"><span class="mi-icon">📲</span> Install App</button>` : ''}
+
     <button class="menu-item" onclick="closeSidebar(); openProfileModal();"><span class="mi-icon">👤</span> Profile</button>
 
     <button class="menu-item" onclick="toggleTheme()">
@@ -1921,7 +1977,7 @@ document.addEventListener('visibilitychange', ()=>{
 });
 
 /* ===================== INIT ===================== */
-window.__BUSINESS_EMPIRE_APP_VERSION = '2.0.0';
+window.__BUSINESS_EMPIRE_APP_VERSION = '3.0.0';
 (async function init(){
   try {
     await loadBusinessesList();
@@ -1973,7 +2029,7 @@ window.__BUSINESS_EMPIRE_APP_VERSION = '2.0.0';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./service-worker.js?v=2').then(reg => reg.update()).catch(err =>
+    navigator.serviceWorker.register('./service-worker.js?v=3').then(reg => reg.update()).catch(err =>
       console.warn('[Business Empire] Service worker registration failed:', err)
     );
   });

@@ -1,0 +1,1 @@
+UPLOAD/REPLACE ALL FILES IN THIS FOLDER ON GITHUB. No new Supabase SQL is required for V3. After commit, hard refresh the live site once.
