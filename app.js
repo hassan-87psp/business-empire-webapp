@@ -119,7 +119,9 @@ async function saveBusinessesList(){
 }
 async function loadAll(){
   bizData = {};
-  for(const b of myBusinesses()){ bizData[b.id] = await loadBiz(b.id); }
+  const list = myBusinesses();
+  const loaded = await Promise.all(list.map(b=>loadBiz(b.id)));
+  list.forEach((b,i)=>{ bizData[b.id]=loaded[i]; });
 }
 async function loadOrder(){
   try{
@@ -1105,10 +1107,12 @@ async function startAuthenticatedApp(){
   allowedBizIds=accessMode==='owner'?null:window.beAuth.getBusinessIds();
   ownerProfile={name:p.name||'',email:myEmail,phone:p.phone||''};
   await loadBusinessesList();
-  await Promise.all([loadAll(),loadOrder(),loadReminders(),loadLog(),loadFx()]);
-  collaborators=await loadCollaborators();
-  myAvatar=await loadAvatar();
+  await Promise.all([loadAll(),loadOrder(),loadReminders(),loadLog(),loadFx(),loadAvatar().then(v=>{myAvatar=v})]);
   proceedToApp();
+  // Collaborator management is owner-only and should never block dashboard startup.
+  if(accessMode==='owner'){
+    loadCollaborators().then(list=>{collaborators=list;updateCollabBadge();if(currentView==='collaborators')renderCollaborators()}).catch(()=>{});
+  }
 }
 function proceedToApp(){
   document.getElementById('reminderBtn').style.display='flex';
@@ -1125,14 +1129,22 @@ function proceedToApp(){
 function updateCollabBadge(){const badge=document.getElementById('collabBadge');if(!badge)return;const pending=collaborators.filter(c=>c.status==='invited').length;badge.textContent=pending;badge.classList.toggle('zero',pending===0);if(pending>0)badge.style.background='var(--gold)'}
 function openCollaborators(){if(accessMode!=='owner')return;currentView='collaborators';currentBiz=null;renderCollaborators()}
 function renderCollaborators(){
-  currentView='collaborators';document.getElementById('pageHeading').style.display='block';document.getElementById('pageTitle').textContent='Collaborators';document.getElementById('pageSub').textContent='Invite users and control which businesses they can access';document.getElementById('backBtn').style.display='flex';
+  currentView='collaborators';document.getElementById('pageHeading').style.display='block';document.getElementById('pageTitle').textContent='Collaborator Access Center';document.getElementById('pageSub').textContent='Invitations, accepted accounts, last login and business permissions';document.getElementById('backBtn').style.display='flex';
   const invited=collaborators.filter(c=>c.status==='invited'),active=collaborators.filter(c=>c.status==='active'),disabled=collaborators.filter(c=>c.status==='disabled');
   const bizNames=ids=>(ids||[]).map(id=>BUSINESSES.find(b=>b.id===id)?.name||id).join(', ')||'—';
-  const card=(c,statusLabel,buttons)=>`<div class="rem-item"><div class="rem-body"><div class="rem-title">${esc2(c.name||c.email)}</div><div class="rem-sub">${esc2(c.email)} · ${statusLabel}<br>Access: ${esc2(bizNames(c.businessIds))}${c.lastLoginAt?`<br>Last login: ${fmtDateTime(c.lastLoginAt)}`:''}</div></div><div class="row-actions">${buttons}</div></div>`;
-  document.getElementById('app').innerHTML=`<div class="rem-toprow"><button class="btn" onclick="openAddCollaboratorModal()">+ Add Collaborator</button></div>
-    <div class="rem-section-title">✉️ Invited (${invited.length})</div>${invited.length?invited.map(c=>card(c,'Invitation sent',`<button class="btn-ghost" onclick="resendCollaboratorInvite('${c.id}')">Resend Invite</button><button class="btn-ghost" onclick="editCollaboratorAccess('${c.id}')">Edit Access</button><button class="btn-ghost" onclick="removeCollaborator('${c.id}')">Remove</button>`)).join(''):'<div class="empty-state" style="padding:24px">No pending invitations</div>'}
-    <div class="rem-section-title">✅ Active (${active.length})</div>${active.length?active.map(c=>card(c,'Active',`<button class="btn-ghost" onclick="editCollaboratorAccess('${c.id}')">Edit Access</button><button class="btn-ghost" onclick="disableCollaborator('${c.id}')">Disable</button><button class="btn-ghost" onclick="removeCollaborator('${c.id}')">Remove</button>`)).join(''):'<div class="empty-state" style="padding:24px">No active collaborators yet</div>'}
-    ${disabled.length?`<div class="rem-section-title">⛔ Disabled (${disabled.length})</div>${disabled.map(c=>card(c,'Disabled',`<button class="btn-ghost" onclick="removeCollaborator('${c.id}')">Remove</button>`)).join('')}`:''}`;
+  const statusChip=(status)=> status==='active'?'<span class="status-chip done">Accepted</span>':status==='disabled'?'<span class="status-chip overdue">Disabled</span>':'<span class="status-chip due">Invite Pending</span>';
+  const card=(c,buttons)=>`<div class="rem-item" style="align-items:flex-start"><div class="rem-body"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><div class="rem-title">${esc2(c.name||c.email)}</div>${statusChip(c.status)}</div><div class="rem-sub" style="line-height:1.65">${esc2(c.email)}<br><b style="color:var(--text)">Business Access:</b> ${esc2(bizNames(c.businessIds))}<br>${c.status==='invited'?`<b style="color:var(--text)">Invite Sent:</b> ${fmtDateTime(c.lastInviteSentAt||c.inviteSentAt||c.requestedAt)}`:`<b style="color:var(--text)">Accepted:</b> ${fmtDateTime(c.acceptedAt||c.approvedAt)}`} ${c.lastLoginAt?`<br><b style="color:var(--text)">Last Login:</b> ${fmtDateTime(c.lastLoginAt)}`:''}</div></div><div class="row-actions" style="justify-content:flex-end">${buttons}</div></div>`;
+  document.getElementById('app').innerHTML=`
+    <div class="rem-stats collab-stats">
+      <div class="rem-stat"><div class="l">Total</div><div class="v">${collaborators.length}</div></div>
+      <div class="rem-stat today"><div class="l">Pending Invites</div><div class="v">${invited.length}</div></div>
+      <div class="rem-stat"><div class="l">Accepted</div><div class="v" style="color:var(--green)">${active.length}</div></div>
+      <div class="rem-stat overdue"><div class="l">Disabled</div><div class="v">${disabled.length}</div></div>
+    </div>
+    <div class="rem-toprow"><div class="email-note" style="margin:0;max-width:720px">Only users invited by the Owner can create an account. Accepted users appear under Active automatically after they set their password.</div><button class="btn" onclick="openAddCollaboratorModal()">+ Add Collaborator</button></div>
+    <div class="rem-section-title">✉️ Pending Invitations (${invited.length})</div>${invited.length?invited.map(c=>card(c,`<button class="btn-ghost" onclick="resendCollaboratorInvite('${c.id}')">Resend Invite</button><button class="btn-ghost" onclick="editCollaboratorAccess('${c.id}')">Edit Access</button><button class="btn-ghost" onclick="removeCollaborator('${c.id}')">Remove</button>`)).join(''):'<div class="empty-state" style="padding:24px">No pending invitations</div>'}
+    <div class="rem-section-title">✅ Accepted / Active (${active.length})</div>${active.length?active.map(c=>card(c,`<button class="btn-ghost" onclick="editCollaboratorAccess('${c.id}')">Edit Access</button><button class="btn-ghost" onclick="disableCollaborator('${c.id}')">Disable</button><button class="btn-ghost" onclick="removeCollaborator('${c.id}')">Remove</button>`)).join(''):'<div class="empty-state" style="padding:24px">No collaborator has accepted an invitation yet</div>'}
+    ${disabled.length?`<div class="rem-section-title">⛔ Disabled (${disabled.length})</div>${disabled.map(c=>card(c,`<button class="btn-ghost" onclick="removeCollaborator('${c.id}')">Remove</button>`)).join('')}`:''}`;
   updateCollabBadge();
 }
 async function refreshCollaborators(){collaborators=await loadCollaborators();if(currentView==='collaborators')renderCollaborators();else updateCollabBadge()}
@@ -1149,7 +1161,13 @@ async function saveNewCollaborator(){
   const chosen=Array.from(document.querySelectorAll('.newCollabChk:checked')).map(el=>el.value);
   if(!email||!email.includes('@')){showToast('Valid email daalein');return}if(!name){showToast('Name daalein');return}if(!chosen.length){showToast('Kam se kam ek business select karein');return}
   const btn=document.getElementById('inviteCollabBtn');if(btn){btn.disabled=true;btn.textContent='Sending…'}
-  try{await window.beAuth.manageCollaborator({action:'invite',email,name,businessIds:chosen});closeModal();await refreshCollaborators();showToast('Invitation email sent ✅')}catch(e){showToast(e.message||'Invite failed');if(btn){btn.disabled=false;btn.textContent='Send Invitation'}}
+  // Do not keep the owner trapped behind a modal while the email provider finishes.
+  closeModal();showToast('Invitation send ho rahi hai…');
+  try{
+    await window.beAuth.manageCollaborator({action:'invite',email,name,businessIds:chosen});
+    showToast('Invitation email sent ✅');
+    refreshCollaborators().catch(()=>{});
+  }catch(e){showToast((e.message||'Invite failed')+' — dobara try karein')}
 }
 function editCollaboratorAccess(id){const c=collaborators.find(x=>x.id===id);if(!c)return;openModal(`<h3>Edit Access — ${esc2(c.name||c.email)} <span class="modal-close" onclick="closeModal()">✕</span></h3><div class="modal-field"><label>Name</label><input type="text" id="editCollabName" value="${esc(c.name||'')}"></div><div class="biz-check-list">${BUSINESSES.map(b=>`<label class="biz-check-item"><input type="checkbox" value="${b.id}" class="editBizChk" ${(c.businessIds||[]).includes(b.id)?'checked':''}> ${b.icon} ${b.name}</label>`).join('')}</div><div class="modal-actions"><button class="btn" onclick="saveCollaboratorAccess('${id}')">Save</button><button class="btn-ghost" onclick="closeModal()">Cancel</button></div>`)}
 async function saveCollaboratorAccess(id){const c=collaborators.find(x=>x.id===id);if(!c)return;const chosen=Array.from(document.querySelectorAll('.editBizChk:checked')).map(el=>el.value),name=document.getElementById('editCollabName').value.trim();if(!chosen.length){showToast('Kam se kam ek business select karein');return}try{await window.beAuth.manageCollaborator({action:'update_access',userId:id,name,businessIds:chosen});closeModal();await refreshCollaborators();showToast('Access updated ✅')}catch(e){showToast(e.message||'Update failed')}}
@@ -1739,7 +1757,7 @@ document.addEventListener('visibilitychange', ()=>{
 });
 
 /* ===================== INIT ===================== */
-window.__BUSINESS_EMPIRE_APP_VERSION='4.0.0';
+window.__BUSINESS_EMPIRE_APP_VERSION='5.0.0';
 (async function init(){
   try{
     await applySavedTheme();
@@ -1753,5 +1771,5 @@ window.__BUSINESS_EMPIRE_APP_VERSION='4.0.0';
     setInterval(checkReminders,15000);setInterval(updateReminderBadge,30000);
   }catch(err){console.error('[Business Empire] Startup failed:',err);document.getElementById('app').innerHTML='<div class="gate-wrap"><div class="gate-card"><h2>App could not start</h2><p>'+esc2(err.message||'Please refresh and try again.')+'</p><button class="btn" onclick="location.reload()">Refresh App</button></div></div>'}
 })();
-if('serviceWorker'in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('./service-worker.js?v=4').then(reg=>reg.update()).catch(err=>console.warn('[Business Empire] service worker failed:',err))})}
+if('serviceWorker'in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('./service-worker.js?v=5').then(reg=>reg.update()).catch(err=>console.warn('[Business Empire] service worker failed:',err))})}
 

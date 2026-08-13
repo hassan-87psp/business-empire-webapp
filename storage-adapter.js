@@ -35,7 +35,7 @@
     async get(key,shared){shared=!!shared;if(!shared)return localGet(key,false);const mirror=localGet(key,true);if(!canRemote())return mirror;try{const r=await remoteGet(key);if(r)localSet(key,r.value,true);return r||mirror}catch(e){console.warn('[Business Empire] remote read fallback',e);markRemoteFailure();return mirror}},
     async set(key,value,shared){shared=!!shared;const result=localSet(key,value,shared);if(shared)syncSet(key,value);return result},
     async delete(key,shared){shared=!!shared;localDelete(key,shared);if(shared)syncDelete(key)},
-    sync:flushQueue,mode:configured?'supabase-auth':'local',version:'4.0.0'
+    sync:flushQueue,mode:configured?'supabase-auth':'local',version:'5.0.0'
   };
   window.addEventListener('online',()=>{remotePausedUntil=0;flushQueue()});
 })();

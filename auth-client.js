@@ -160,10 +160,12 @@
   }
   async function listCollaborators(){
     if(!isOwner()) return [];
-    const profs=await request(base+'/rest/v1/profiles?role=eq.collaborator&select=id,email,name,phone,status,last_sign_in_at,created_at,updated_at&order=created_at.desc',{headers:restHeaders()});
-    const access=await request(base+'/rest/v1/business_access?select=user_id,business_id,created_at',{headers:restHeaders()});
+    const [profs,access]=await Promise.all([
+      request(base+'/rest/v1/profiles?role=eq.collaborator&select=id,email,name,phone,status,last_sign_in_at,created_at,updated_at,invite_sent_at,last_invite_sent_at,accepted_at,disabled_at&order=created_at.desc',{headers:restHeaders()}),
+      request(base+'/rest/v1/business_access?select=user_id,business_id,created_at',{headers:restHeaders()})
+    ]);
     const map={}; (access||[]).forEach(a=>{(map[a.user_id]||(map[a.user_id]=[])).push(a.business_id)});
-    return (profs||[]).map(p=>({id:p.id,email:p.email,name:p.name||'',phone:p.phone||'',status:p.status||'invited',businessIds:map[p.id]||[],requestedAt:p.created_at,approvedAt:p.status==='active'?p.updated_at:null,lastLoginAt:p.last_sign_in_at||null}));
+    return (profs||[]).map(p=>({id:p.id,email:p.email,name:p.name||'',phone:p.phone||'',status:p.status||'invited',businessIds:map[p.id]||[],requestedAt:p.created_at,inviteSentAt:p.invite_sent_at||p.created_at,lastInviteSentAt:p.last_invite_sent_at||p.invite_sent_at||p.created_at,acceptedAt:p.accepted_at||null,approvedAt:p.accepted_at||(p.status==='active'?p.updated_at:null),disabledAt:p.disabled_at||null,lastLoginAt:p.last_sign_in_at||null}));
   }
   async function manageCollaborator(payload){
     if(!isOwner()) throw new Error('Owner access required');
@@ -172,5 +174,5 @@
       method:'POST',headers:{'apikey':key,'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(payload||{})
     });
   }
-  window.beAuth={initialize,signIn,signOut,sendPasswordReset,updatePassword,updateMyProfile,listCollaborators,manageCollaborator,fetchProfile,fetchAccess,activateMyProfile,ensureFresh,getAccessToken,getUserId,getUser,getProfile,getBusinessIds,isOwner,isAuthenticated,getCallbackType:()=>callbackType,getCallbackError:()=>callbackError,siteUrl,version:'4.0.0'};
+  window.beAuth={initialize,signIn,signOut,sendPasswordReset,updatePassword,updateMyProfile,listCollaborators,manageCollaborator,fetchProfile,fetchAccess,activateMyProfile,ensureFresh,getAccessToken,getUserId,getUser,getProfile,getBusinessIds,isOwner,isAuthenticated,getCallbackType:()=>callbackType,getCallbackError:()=>callbackError,siteUrl,version:'5.0.0'};
 })();
