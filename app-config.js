@@ -7,5 +7,5 @@ window.BUSINESS_EMPIRE_CONFIG = {
   supabaseUrl: 'https://vzgksyakmwvrtsmebgcc.supabase.co',
   supabaseAnonKey: 'sb_publishable_Q2-hSVOIaT7BnrsP4jUXUg_FSrA5w1x',
   workspaceId: 'business-empire-main',
-  siteUrl: 'https://hassan-87psp.github.io/business-empire-webapp/'
+  siteUrl: 'https://www.businessempire4u.com/'
 };

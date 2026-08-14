@@ -5,7 +5,7 @@
   const base = String(cfg.supabaseUrl || '').replace(/\/$/, '');
   const key = String(cfg.supabaseAnonKey || '');
   const siteUrl = String(cfg.siteUrl || (location.origin + location.pathname));
-  const SESSION_KEY = 'be:auth-session:v4';
+  const SESSION_KEY = 'be:auth-session:v6';
   const configured = /^https:\/\/.+\.supabase\.co$/i.test(base) && key.length > 20;
   let session = null;
   let user = null;
@@ -52,11 +52,12 @@
     const hash = new URLSearchParams((location.hash||'').replace(/^#/,''));
     const query = new URLSearchParams(location.search||'');
     const params = hash.has('access_token') || hash.has('error') ? hash : query;
+    const forceInvite = query.get('be_invite') === '1';
     const err = params.get('error_description') || params.get('error');
     if(err){ callbackError = decodeURIComponent(String(err).replace(/\+/g,' ')); return; }
     const at=params.get('access_token'), rt=params.get('refresh_token');
     if(at){
-      callbackType=params.get('type') || 'auth';
+      callbackType=forceInvite ? 'invite' : (params.get('type') || 'auth');
       saveSession({access_token:at, refresh_token:rt||'', expires_in:Number(params.get('expires_in')||3600), token_type:params.get('token_type')||'bearer'});
       try{ history.replaceState({},document.title,location.pathname); }catch(_){}
     }
@@ -128,7 +129,8 @@
     if(!profile){ clearSession(); throw new Error('This account has not been given Business Empire access.'); }
     if(profile.status==='disabled'){ clearSession(); throw new Error('This account is disabled. Contact the owner.'); }
     if(profile.status==='invited') await activateMyProfile();
-    await fetchAccess(); await touchLastLogin();
+    await fetchAccess();
+    touchLastLogin();
     return {user,profile,businessIds:getBusinessIds()};
   }
   async function signOut(){
@@ -169,10 +171,26 @@
   }
   async function manageCollaborator(payload){
     if(!isOwner()) throw new Error('Owner access required');
+    try{ await ensureFresh(); }
+    catch(_){ clearSession(); throw new Error('Your session expired. Please sign in again.'); }
     const token=getAccessToken();
-    return await request(base+'/functions/v1/manage-collaborator',{
-      method:'POST',headers:{'apikey':key,'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(payload||{})
-    });
+    if(!token) throw new Error('Your session expired. Please sign in again.');
+    try{
+      return await request(base+'/functions/v1/manage-collaborator',{
+        method:'POST',headers:{'apikey':key,'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(payload||{})
+      });
+    }catch(e){
+      if(e && (e.status===401 || e.status===403) && /session|token|jwt|expired/i.test(String(e.message||''))){
+        try{
+          await refreshSession();
+          const fresh=getAccessToken();
+          return await request(base+'/functions/v1/manage-collaborator',{
+            method:'POST',headers:{'apikey':key,'Authorization':'Bearer '+fresh,'Content-Type':'application/json'},body:JSON.stringify(payload||{})
+          });
+        }catch(_){ clearSession(); throw new Error('Your session expired. Please sign in again.'); }
+      }
+      throw e;
+    }
   }
-  window.beAuth={initialize,signIn,signOut,sendPasswordReset,updatePassword,updateMyProfile,listCollaborators,manageCollaborator,fetchProfile,fetchAccess,activateMyProfile,ensureFresh,getAccessToken,getUserId,getUser,getProfile,getBusinessIds,isOwner,isAuthenticated,getCallbackType:()=>callbackType,getCallbackError:()=>callbackError,siteUrl,version:'5.0.0'};
+  window.beAuth={initialize,signIn,signOut,sendPasswordReset,updatePassword,updateMyProfile,listCollaborators,manageCollaborator,fetchProfile,fetchAccess,activateMyProfile,ensureFresh,getAccessToken,getUserId,getUser,getProfile,getBusinessIds,isOwner,isAuthenticated,getCallbackType:()=>callbackType,getCallbackError:()=>callbackError,siteUrl,version:'6.0.0'};
 })();
