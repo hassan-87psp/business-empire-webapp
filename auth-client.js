@@ -1,4 +1,4 @@
-/* Business Empire Auth Client v4 — Supabase Auth + owner/collaborator roles. */
+/* Business Empire Auth Client v7 — Supabase Auth + owner/collaborator roles. */
 (function(){
   'use strict';
   const cfg = window.BUSINESS_EMPIRE_CONFIG || {};
@@ -113,7 +113,11 @@
         await ensureFresh();
         await fetchProfile();
         if(profile?.status==='disabled'){ clearSession(); return {configured:true,disabled:true}; }
-        if(profile && callbackType!=='invite' && callbackType!=='recovery' && profile.status==='invited') await activateMyProfile();
+        // V7: an invited collaborator must set a password before the app profile
+        // becomes active. Never auto-activate merely because a magic-link session exists.
+        // If the invite page is reloaded after the URL hash was cleaned, keep showing
+        // Set Password while the database profile is still invited.
+        if(profile?.status==='invited' && callbackType!=='recovery') callbackType='invite';
         if(profile) await fetchAccess();
       }catch(e){ console.warn('[Business Empire] auth initialize failed:',e); clearSession(); }
     }
@@ -128,7 +132,10 @@
     await fetchProfile();
     if(!profile){ clearSession(); throw new Error('This account has not been given Business Empire access.'); }
     if(profile.status==='disabled'){ clearSession(); throw new Error('This account is disabled. Contact the owner.'); }
-    if(profile.status==='invited') await activateMyProfile();
+    if(profile.status==='invited'){
+      clearSession();
+      throw new Error('Invitation setup is not complete. Open the latest invitation email and set your password first.');
+    }
     await fetchAccess();
     touchLastLogin();
     return {user,profile,businessIds:getBusinessIds()};
@@ -192,5 +199,5 @@
       throw e;
     }
   }
-  window.beAuth={initialize,signIn,signOut,sendPasswordReset,updatePassword,updateMyProfile,listCollaborators,manageCollaborator,fetchProfile,fetchAccess,activateMyProfile,ensureFresh,getAccessToken,getUserId,getUser,getProfile,getBusinessIds,isOwner,isAuthenticated,getCallbackType:()=>callbackType,getCallbackError:()=>callbackError,siteUrl,version:'6.0.0'};
+  window.beAuth={initialize,signIn,signOut,sendPasswordReset,updatePassword,updateMyProfile,listCollaborators,manageCollaborator,fetchProfile,fetchAccess,activateMyProfile,ensureFresh,getAccessToken,getUserId,getUser,getProfile,getBusinessIds,isOwner,isAuthenticated,getCallbackType:()=>callbackType,getCallbackError:()=>callbackError,siteUrl,version:'7.0.0'};
 })();

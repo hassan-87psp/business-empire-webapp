@@ -1106,9 +1106,15 @@ async function startAuthenticatedApp(){
   myEmail=p.email||window.beAuth.getUser()?.email||'';
   allowedBizIds=accessMode==='owner'?null:window.beAuth.getBusinessIds();
   ownerProfile={name:p.name||'',email:myEmail,phone:p.phone||''};
-  await loadBusinessesList();
-  await Promise.all([loadAll(),loadOrder(),loadReminders(),loadLog(),loadFx(),loadAvatar().then(v=>{myAvatar=v})]);
+  // V7 fast-start: only data required to render the dashboard blocks first paint.
+  // FX can load in parallel with the business list; reminders/log/avatar load after.
+  await Promise.all([loadBusinessesList(),loadFx()]);
+  await Promise.all([loadAll(),loadOrder()]);
   proceedToApp();
+  Promise.all([loadReminders(),loadLog(),loadAvatar().then(v=>{myAvatar=v})]).then(()=>{
+    updateReminderBadge();
+    if(document.getElementById('sidebar')?.classList.contains('open')) renderSidebarContent();
+  }).catch(()=>{});
   // Collaborator management is owner-only and should never block dashboard startup.
   if(accessMode==='owner'){
     loadCollaborators().then(list=>{collaborators=list;updateCollabBadge();if(currentView==='collaborators')renderCollaborators()}).catch(()=>{});
@@ -1757,7 +1763,7 @@ document.addEventListener('visibilitychange', ()=>{
 });
 
 /* ===================== INIT ===================== */
-window.__BUSINESS_EMPIRE_APP_VERSION='5.0.0';
+window.__BUSINESS_EMPIRE_APP_VERSION='7.0.0';
 (async function init(){
   try{
     await applySavedTheme();
@@ -1771,5 +1777,5 @@ window.__BUSINESS_EMPIRE_APP_VERSION='5.0.0';
     setInterval(checkReminders,15000);setInterval(updateReminderBadge,30000);
   }catch(err){console.error('[Business Empire] Startup failed:',err);document.getElementById('app').innerHTML='<div class="gate-wrap"><div class="gate-card"><h2>App could not start</h2><p>'+esc2(err.message||'Please refresh and try again.')+'</p><button class="btn" onclick="location.reload()">Refresh App</button></div></div>'}
 })();
-if('serviceWorker'in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('./service-worker.js?v=5').then(reg=>reg.update()).catch(err=>console.warn('[Business Empire] service worker failed:',err))})}
+if('serviceWorker'in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('./service-worker.js?v=7').then(reg=>reg.update()).catch(err=>console.warn('[Business Empire] service worker failed:',err))})}
 
