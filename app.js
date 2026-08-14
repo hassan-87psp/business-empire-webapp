@@ -1860,5 +1860,5 @@ window.__BUSINESS_EMPIRE_APP_VERSION='7.0.0';
     setInterval(checkReminders,15000);setInterval(updateReminderBadge,30000);
   }catch(err){console.error('[Business Empire] Startup failed:',err);document.getElementById('app').innerHTML='<div class="gate-wrap"><div class="gate-card"><h2>App could not start</h2><p>'+esc2(err.message||'Please refresh and try again.')+'</p><button class="btn" onclick="location.reload()">Refresh App</button></div></div>'}
 })();
-if('serviceWorker'in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('./service-worker.js?v=7').then(reg=>reg.update()).catch(err=>console.warn('[Business Empire] service worker failed:',err))})}
+if('serviceWorker'in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('./service-worker.js?v=9').then(reg=>reg.update()).catch(err=>console.warn('[Business Empire] service worker failed:',err))})}
 

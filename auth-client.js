@@ -1,4 +1,4 @@
-/* Business Empire Auth Client v8 — Supabase Auth + owner/collaborator roles. */
+/* Business Empire Auth Client v9 — Supabase Auth + owner/collaborator roles. */
 (function(){
   'use strict';
   const cfg = window.BUSINESS_EMPIRE_CONFIG || {};
@@ -177,21 +177,6 @@
     return (profs||[]).map(p=>({id:p.id,email:p.email,name:p.name||'',phone:p.phone||'',status:p.status||'invited',businessIds:map[p.id]||[],requestedAt:p.created_at,inviteSentAt:p.invite_sent_at||p.created_at,lastInviteSentAt:p.last_invite_sent_at||p.invite_sent_at||p.created_at,acceptedAt:p.accepted_at||null,approvedAt:p.accepted_at||(p.status==='active'?p.updated_at:null),disabledAt:p.disabled_at||null,lastLoginAt:p.last_sign_in_at||null}));
   }
 
-  function inviteRedirectUrl(){
-    const clean=String(siteUrl||location.origin+'/').replace(/\/?$/,'/');
-    return clean+'?be_invite=1';
-  }
-  async function sendInviteMagicLink(email){
-    const recipient=String(email||'').trim().toLowerCase();
-    if(!recipient || !recipient.includes('@')) throw new Error('Invitation email address is invalid.');
-    const redirect=inviteRedirectUrl();
-    return await request(base+'/auth/v1/otp?redirect_to='+encodeURIComponent(redirect),{
-      method:'POST',
-      headers:authHeaders(null),
-      body:JSON.stringify({email:recipient,create_user:false})
-    });
-  }
-
   async function manageCollaborator(payload){
     if(!isOwner()) throw new Error('Owner access required');
     try{ await ensureFresh(); }
@@ -217,21 +202,13 @@
       }else throw e;
     }
 
-    if(String(result?.backendVersion||'')!=='8.0.0'){
-      throw new Error('Backend update required. Deploy manage-collaborator V8 in Supabase, then try again.');
+    if(String(result?.backendVersion||'')!=='9.0.0'){
+      throw new Error('Backend update required. Deploy manage-collaborator V9 in Supabase, then try again.');
     }
-
-    if((payload?.action==='invite' || payload?.action==='resend_invite') && result?.sendEmail){
-      const recipient=String(result.email || payload.email || '').trim().toLowerCase();
-      try{
-        await sendInviteMagicLink(recipient);
-        result.emailSent=true;
-      }catch(e){
-        const msg=String(e?.message||e||'Email could not be sent');
-        throw new Error('Collaborator saved, but invitation email failed: '+msg);
-      }
+    if((payload?.action==='invite' || payload?.action==='resend_invite') && result?.emailSent!==true){
+      throw new Error(result?.emailError || 'Invitation email was not confirmed as sent.');
     }
     return result;
   }
-  window.beAuth={initialize,signIn,signOut,sendPasswordReset,sendInviteMagicLink,updatePassword,updateMyProfile,listCollaborators,manageCollaborator,fetchProfile,fetchAccess,activateMyProfile,ensureFresh,getAccessToken,getUserId,getUser,getProfile,getBusinessIds,isOwner,isAuthenticated,getCallbackType:()=>callbackType,getCallbackError:()=>callbackError,siteUrl,version:'8.0.0'};
+  window.beAuth={initialize,signIn,signOut,sendPasswordReset,updatePassword,updateMyProfile,listCollaborators,manageCollaborator,fetchProfile,fetchAccess,activateMyProfile,ensureFresh,getAccessToken,getUserId,getUser,getProfile,getBusinessIds,isOwner,isAuthenticated,getCallbackType:()=>callbackType,getCallbackError:()=>callbackError,siteUrl,version:'9.0.0'};
 })();

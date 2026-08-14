@@ -11,10 +11,16 @@
 <meta name="apple-mobile-web-app-title" content="Business Empire">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<script defer src="app-config.js?v=8"></script>
-<script defer src="auth-client.js?v=8"></script>
-<script defer src="storage-adapter.js?v=8"></script>
-<script defer src="app.js?v=8"></script>
+<script>
+// V9 deployment guard: clear older Business Empire PWA caches so mixed builds cannot survive an update.
+if ('caches' in window) {
+  caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('business-empire-pwa-')).map(k => caches.delete(k)))).catch(()=>{});
+}
+</script>
+<script defer src="app-config.js?v=9"></script>
+<script defer src="auth-client.js?v=9"></script>
+<script defer src="storage-adapter.js?v=9"></script>
+<script defer src="app.js?v=9"></script>
 <style>
 :root{
   --bg:#0B0E11; --bg2:#12151A; --card:#181A20; --card2:#1E2128;
