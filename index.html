@@ -11,10 +11,10 @@
 <meta name="apple-mobile-web-app-title" content="Business Empire">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<script defer src="app-config.js?v=7"></script>
-<script defer src="auth-client.js?v=7"></script>
-<script defer src="storage-adapter.js?v=7"></script>
-<script defer src="app.js?v=7"></script>
+<script defer src="app-config.js?v=8"></script>
+<script defer src="auth-client.js?v=8"></script>
+<script defer src="storage-adapter.js?v=8"></script>
+<script defer src="app.js?v=8"></script>
 <style>
 :root{
   --bg:#0B0E11; --bg2:#12151A; --card:#181A20; --card2:#1E2128;
@@ -416,6 +416,67 @@ tr:hover td{background:rgba(255,255,255,.02);}
 }
 .sidebar-details[open] summary::after{content:'▴'; color:var(--gold);}
 
+
+/* ===== V8 PROFESSIONAL MOBILE NAV + MENU ICONS ===== */
+.menu-item > svg,
+.sidebar-details summary > svg{
+  width:18px;height:18px;flex:0 0 18px;fill:none;stroke:currentColor;stroke-width:1.8;
+  stroke-linecap:round;stroke-linejoin:round;
+}
+.menu-item.logout-item{margin-top:8px;padding-top:14px;border-top:1px solid var(--border);border-radius:0;color:var(--red);}
+.menu-count{
+  margin-left:auto;min-width:20px;height:20px;padding:0 6px;border-radius:10px;
+  display:inline-flex;align-items:center;justify-content:center;background:rgba(240,185,11,.14);
+  color:var(--gold);font-size:10px;font-weight:800;
+}
+.quick-action-grid{display:grid;grid-template-columns:1fr;gap:10px;}
+.quick-action{
+  width:100%;display:flex;align-items:center;gap:14px;text-align:left;padding:15px;
+  border-radius:12px;border:1px solid var(--border);background:var(--card2);color:var(--text);cursor:pointer;
+}
+.quick-action:hover{border-color:var(--gold);}
+.quick-action svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:0 0 22px;}
+.quick-action.income svg{color:var(--green)} .quick-action.expense svg{color:var(--red)} .quick-action.reminder svg{color:var(--gold)}
+.quick-action span{display:flex;flex-direction:column;gap:3px}.quick-action b{font-size:13px}.quick-action small{font-size:11px;color:var(--sub)}
+.quick-biz-list{display:flex;flex-direction:column;gap:8px;max-height:420px;overflow-y:auto;}
+.quick-biz-btn{
+  display:flex;align-items:center;gap:11px;width:100%;padding:12px 13px;border:1px solid var(--border);
+  background:var(--card2);color:var(--text);border-radius:10px;cursor:pointer;text-align:left;font-weight:700;
+}
+.quick-biz-btn:hover{border-color:var(--gold)}
+.quick-biz-dot{width:10px;height:10px;border-radius:50%;flex:0 0 10px}
+
+.mobile-bottom-nav{
+  position:fixed;left:0;right:0;bottom:0;z-index:220;height:68px;
+  padding:7px 8px calc(7px + env(safe-area-inset-bottom));
+  background:color-mix(in srgb,var(--card) 94%,transparent);
+  border-top:1px solid var(--border);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  box-shadow:0 -12px 28px rgba(0,0,0,.28);align-items:flex-start;justify-content:space-around;
+}
+.mobile-nav-item{
+  position:relative;border:0;background:transparent;color:var(--sub);min-width:56px;height:52px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;
+  font-size:9.5px;font-weight:700;border-radius:12px;
+}
+.mobile-nav-item svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.mobile-nav-item.active{color:var(--gold)}
+.mobile-nav-item.center-add{transform:translateY(-15px);gap:2px;color:var(--text)}
+.mobile-nav-item.center-add .add-circle{
+  width:48px;height:48px;border-radius:16px;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,var(--gold),#d89d00);color:#0b0e11;
+  box-shadow:0 8px 22px rgba(240,185,11,.28);border:1px solid rgba(255,255,255,.12);
+}
+.mobile-nav-item.center-add .add-circle svg{width:24px;height:24px;stroke-width:2.2}
+.mobile-nav-item.center-add span:last-child{font-size:9px;color:var(--sub);font-weight:800}
+@media(min-width:761px){.mobile-bottom-nav{display:none!important}}
+@media(max-width:760px){
+  body{padding-bottom:88px}
+  .fab-reminder{display:none!important}
+  .toast{bottom:86px}
+  .sidebar{padding-bottom:76px}
+  .wrap{padding-bottom:18px}
+}
+
 @media(max-width:900px){
   .grid2{grid-template-columns:1fr;} .form-row, .form-row.wide{grid-template-columns:1fr 1fr;} .summary-row{grid-template-columns:1fr 1fr;}
 }
@@ -461,6 +522,25 @@ tr:hover td{background:rgba(255,255,255,.02);}
 </div>
 
 <button class="fab-reminder" id="fabReminder" style="display:none" onclick="openReminderModal(null)">⏰ + Add Reminder</button>
+
+
+<nav class="mobile-bottom-nav" id="mobileBottomNav" style="display:none" aria-label="Primary navigation">
+  <button class="mobile-nav-item active" data-nav="home" onclick="mobileNavHome()" aria-label="Home">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.8 12 3l9 7.8v9.2a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>Home</span>
+  </button>
+  <button class="mobile-nav-item" data-nav="businesses" onclick="mobileNavBusinesses()" aria-label="Businesses">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4h2a2 2 0 0 1 2 2v10M8 7h4M8 11h4M8 15h4M16 13h2M16 17h2M2 21h20"/></svg><span>Businesses</span>
+  </button>
+  <button class="mobile-nav-item center-add" data-nav="add" onclick="mobileNavAdd()" aria-label="Quick Add">
+    <span class="add-circle"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span><span>Add</span>
+  </button>
+  <button class="mobile-nav-item" data-nav="reminders" onclick="openReminders()" aria-label="Reminders">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><span>Reminders</span>
+  </button>
+  <button class="mobile-nav-item" data-nav="more" onclick="mobileNavMore()" aria-label="More">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span>More</span>
+  </button>
+</nav>
 
 <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 <div class="sidebar" id="sidebar">

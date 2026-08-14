@@ -1,4 +1,4 @@
-/* Business Empire Auth Client v7 — Supabase Auth + owner/collaborator roles. */
+/* Business Empire Auth Client v8 — Supabase Auth + owner/collaborator roles. */
 (function(){
   'use strict';
   const cfg = window.BUSINESS_EMPIRE_CONFIG || {};
@@ -176,28 +176,62 @@
     const map={}; (access||[]).forEach(a=>{(map[a.user_id]||(map[a.user_id]=[])).push(a.business_id)});
     return (profs||[]).map(p=>({id:p.id,email:p.email,name:p.name||'',phone:p.phone||'',status:p.status||'invited',businessIds:map[p.id]||[],requestedAt:p.created_at,inviteSentAt:p.invite_sent_at||p.created_at,lastInviteSentAt:p.last_invite_sent_at||p.invite_sent_at||p.created_at,acceptedAt:p.accepted_at||null,approvedAt:p.accepted_at||(p.status==='active'?p.updated_at:null),disabledAt:p.disabled_at||null,lastLoginAt:p.last_sign_in_at||null}));
   }
+
+  function inviteRedirectUrl(){
+    const clean=String(siteUrl||location.origin+'/').replace(/\/?$/,'/');
+    return clean+'?be_invite=1';
+  }
+  async function sendInviteMagicLink(email){
+    const recipient=String(email||'').trim().toLowerCase();
+    if(!recipient || !recipient.includes('@')) throw new Error('Invitation email address is invalid.');
+    const redirect=inviteRedirectUrl();
+    return await request(base+'/auth/v1/otp?redirect_to='+encodeURIComponent(redirect),{
+      method:'POST',
+      headers:authHeaders(null),
+      body:JSON.stringify({email:recipient,create_user:false})
+    });
+  }
+
   async function manageCollaborator(payload){
     if(!isOwner()) throw new Error('Owner access required');
     try{ await ensureFresh(); }
     catch(_){ clearSession(); throw new Error('Your session expired. Please sign in again.'); }
-    const token=getAccessToken();
-    if(!token) throw new Error('Your session expired. Please sign in again.');
-    try{
+
+    const invoke = async ()=>{
+      const token=getAccessToken();
+      if(!token) throw new Error('Your session expired. Please sign in again.');
       return await request(base+'/functions/v1/manage-collaborator',{
-        method:'POST',headers:{'apikey':key,'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(payload||{})
+        method:'POST',
+        headers:{'apikey':key,'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify(payload||{})
       });
+    };
+
+    let result;
+    try{
+      result=await invoke();
     }catch(e){
       if(e && (e.status===401 || e.status===403) && /session|token|jwt|expired/i.test(String(e.message||''))){
-        try{
-          await refreshSession();
-          const fresh=getAccessToken();
-          return await request(base+'/functions/v1/manage-collaborator',{
-            method:'POST',headers:{'apikey':key,'Authorization':'Bearer '+fresh,'Content-Type':'application/json'},body:JSON.stringify(payload||{})
-          });
-        }catch(_){ clearSession(); throw new Error('Your session expired. Please sign in again.'); }
-      }
-      throw e;
+        try{ await refreshSession(); result=await invoke(); }
+        catch(_){ clearSession(); throw new Error('Your session expired. Please sign in again.'); }
+      }else throw e;
     }
+
+    if(String(result?.backendVersion||'')!=='8.0.0'){
+      throw new Error('Backend update required. Deploy manage-collaborator V8 in Supabase, then try again.');
+    }
+
+    if((payload?.action==='invite' || payload?.action==='resend_invite') && result?.sendEmail){
+      const recipient=String(result.email || payload.email || '').trim().toLowerCase();
+      try{
+        await sendInviteMagicLink(recipient);
+        result.emailSent=true;
+      }catch(e){
+        const msg=String(e?.message||e||'Email could not be sent');
+        throw new Error('Collaborator saved, but invitation email failed: '+msg);
+      }
+    }
+    return result;
   }
-  window.beAuth={initialize,signIn,signOut,sendPasswordReset,updatePassword,updateMyProfile,listCollaborators,manageCollaborator,fetchProfile,fetchAccess,activateMyProfile,ensureFresh,getAccessToken,getUserId,getUser,getProfile,getBusinessIds,isOwner,isAuthenticated,getCallbackType:()=>callbackType,getCallbackError:()=>callbackError,siteUrl,version:'7.0.0'};
+  window.beAuth={initialize,signIn,signOut,sendPasswordReset,sendInviteMagicLink,updatePassword,updateMyProfile,listCollaborators,manageCollaborator,fetchProfile,fetchAccess,activateMyProfile,ensureFresh,getAccessToken,getUserId,getUser,getProfile,getBusinessIds,isOwner,isAuthenticated,getCallbackType:()=>callbackType,getCallbackError:()=>callbackError,siteUrl,version:'8.0.0'};
 })();

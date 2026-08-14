@@ -39,6 +39,71 @@ function goHome(){
     renderGate();
   }
 }
+
+function uiIcon(name){
+  const icons={
+    home:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.8 12 3l9 7.8v9.2a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>',
+    business:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4h2a2 2 0 0 1 2 2v10M8 7h4M8 11h4M8 15h4M16 13h2M16 17h2M2 21h20"/></svg>',
+    user:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
+    theme:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3 6.7 6.7 0 0 0 21 12.8Z"/></svg>',
+    install:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>',
+    share:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.7 6.8-4.4M8.6 13.3l6.8 4.4"/></svg>',
+    info:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 10v6M12 7h.01"/></svg>',
+    logout:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h5M14 8l4 4-4 4M8 12h10"/></svg>',
+    bell:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>',
+    users:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20a6 6 0 0 1 12 0M14 20a5 5 0 0 1 7 0"/></svg>',
+    plus:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+    menu:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>'
+  };
+  return icons[name]||'';
+}
+function setMobileNavActive(name){
+  document.querySelectorAll('.mobile-nav-item').forEach(el=>el.classList.toggle('active',el.dataset.nav===name));
+}
+function syncMobileNavToView(){
+  if(currentView==='business') setMobileNavActive('businesses');
+  else if(currentView==='reminders') setMobileNavActive('reminders');
+  else if(currentView==='collaborators' || currentView==='globallog') setMobileNavActive('more');
+  else setMobileNavActive('home');
+}
+function mobileNavHome(){ goHome(); setMobileNavActive('home'); }
+function mobileNavBusinesses(){
+  closeSidebar();
+  if(!accessMode){renderGate();return}
+  if(currentView!=='dashboard' || currentBiz){currentBiz=null;renderDashboard()}
+  setMobileNavActive('businesses');
+  setTimeout(()=>{
+    const grid=document.querySelector('.biz-grid');
+    if(grid) grid.scrollIntoView({behavior:'smooth',block:'start'});
+  },40);
+}
+function mobileNavMore(){ setMobileNavActive('more'); openSidebar(); }
+function mobileNavAdd(){ openQuickAddMenu(); }
+function openQuickAddMenu(){
+  if(!accessMode) return;
+  openModal(`<h3>Quick Add <span class="modal-close" onclick="closeModal()">✕</span></h3>
+    <div class="quick-action-grid">
+      <button class="quick-action income" onclick="openQuickBusinessPicker('income')">${uiIcon('plus')}<span><b>Add Income</b><small>Choose a business</small></span></button>
+      <button class="quick-action expense" onclick="openQuickBusinessPicker('expense')">${uiIcon('plus')}<span><b>Add Expense</b><small>Choose a business</small></span></button>
+      <button class="quick-action reminder" onclick="closeModal();openReminderModal(null)">${uiIcon('bell')}<span><b>Add Reminder</b><small>Create a reminder</small></span></button>
+    </div>`);
+}
+function openQuickBusinessPicker(type){
+  openModal(`<h3>${type==='income'?'Add Income':'Add Expense'} <span class="modal-close" onclick="closeModal()">✕</span></h3>
+    <div class="quick-biz-list">
+      ${myBusinesses().map(b=>`<button class="quick-biz-btn" onclick="quickOpenBusinessTab('${b.id}','${type}')"><span class="quick-biz-dot" style="background:${b.color}"></span><span>${esc2(b.name)}</span></button>`).join('')}
+    </div>`);
+}
+function quickOpenBusinessTab(id,type){
+  closeModal();
+  if(!canAccessBiz(id)) return;
+  currentBiz=id;
+  currentTab=type;
+  currentView='business';
+  renderBizDetail();
+  setMobileNavActive('businesses');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
 async function installPWA(){
   if(isPwaStandalone()){ showToast('Business Empire app already installed ✅'); return; }
   if(deferredInstallPrompt){
@@ -351,6 +416,7 @@ function updateReminderBadge(){
 /* ===================== RENDER: DASHBOARD ===================== */
 function renderDashboard(){
   currentView = 'dashboard';
+  setMobileNavActive('home');
   document.getElementById('pageHeading').style.display = 'none';
   document.getElementById('backBtn').style.display = 'none';
   updateBizCountBadge();
@@ -551,6 +617,7 @@ function openBizAndHistory(bizId, txnId){
 function openBiz(id){
   if(!canAccessBiz(id)){ showToast('Aapko is business ka access nahi hai'); return; }
   currentBiz = id; currentTab = 'overview'; currentView = 'business';
+  setMobileNavActive('businesses');
   renderBizDetail();
 }
 function backToDashboard(){
@@ -560,6 +627,7 @@ function backToDashboard(){
 
 function renderBizDetail(){
   currentView = 'business';
+  setMobileNavActive('businesses');
   const b = BUSINESSES.find(x=>x.id===currentBiz);
   const data = bizData[currentBiz];
   document.getElementById('pageHeading').style.display = 'block';
@@ -1033,7 +1101,7 @@ document.getElementById('reminderBtn').addEventListener('click', openReminders);
 
 /* ===================== AUTH + ACCESS ===================== */
 function hideAppChrome(){
-  ['sessionBar','collabBtn','reminderBtn','bizCountBadge','signOutBtn','backBtn','fabReminder','pageHeading'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
+  ['sessionBar','collabBtn','reminderBtn','bizCountBadge','signOutBtn','backBtn','fabReminder','pageHeading','mobileBottomNav'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
   document.getElementById('pageTitle').textContent='Business Empire';
   document.getElementById('pageSub').textContent='Sign in to continue';
 }
@@ -1060,6 +1128,7 @@ async function tryAuthLogin(){
   const btn=document.getElementById('loginBtn'); if(btn){btn.disabled=true;btn.textContent='Signing in…'}
   try{
     await window.beAuth.signIn(email,password);
+    if(btn)btn.textContent='Opening dashboard…';
     await startAuthenticatedApp();
   }catch(e){ showToast(e.message||'Login failed'); if(btn){btn.disabled=false;btn.textContent='Login'} }
 }
@@ -1122,6 +1191,7 @@ async function startAuthenticatedApp(){
 }
 function proceedToApp(){
   document.getElementById('reminderBtn').style.display='flex';
+  const mobileNav=document.getElementById('mobileBottomNav');if(mobileNav)mobileNav.style.display='flex';
   document.getElementById('signOutBtn').style.display='flex';
   document.getElementById('fabReminder').style.display='flex';
   document.getElementById('bizCountBadge').style.display='flex';
@@ -1133,7 +1203,7 @@ function proceedToApp(){
 
 /* ===================== COLLABORATORS MANAGEMENT (Owner only) ===================== */
 function updateCollabBadge(){const badge=document.getElementById('collabBadge');if(!badge)return;const pending=collaborators.filter(c=>c.status==='invited').length;badge.textContent=pending;badge.classList.toggle('zero',pending===0);if(pending>0)badge.style.background='var(--gold)'}
-function openCollaborators(){if(accessMode!=='owner')return;currentView='collaborators';currentBiz=null;renderCollaborators()}
+function openCollaborators(){if(accessMode!=='owner')return;currentView='collaborators';currentBiz=null;setMobileNavActive('more');renderCollaborators()}
 function renderCollaborators(){
   currentView='collaborators';document.getElementById('pageHeading').style.display='block';document.getElementById('pageTitle').textContent='Collaborator Access Center';document.getElementById('pageSub').textContent='Invitations, accepted accounts, last login and business permissions';document.getElementById('backBtn').style.display='flex';
   const invited=collaborators.filter(c=>c.status==='invited'),active=collaborators.filter(c=>c.status==='active'),disabled=collaborators.filter(c=>c.status==='disabled');
@@ -1177,7 +1247,17 @@ async function saveNewCollaborator(){
 }
 function editCollaboratorAccess(id){const c=collaborators.find(x=>x.id===id);if(!c)return;openModal(`<h3>Edit Access — ${esc2(c.name||c.email)} <span class="modal-close" onclick="closeModal()">✕</span></h3><div class="modal-field"><label>Name</label><input type="text" id="editCollabName" value="${esc(c.name||'')}"></div><div class="biz-check-list">${BUSINESSES.map(b=>`<label class="biz-check-item"><input type="checkbox" value="${b.id}" class="editBizChk" ${(c.businessIds||[]).includes(b.id)?'checked':''}> ${b.icon} ${b.name}</label>`).join('')}</div><div class="modal-actions"><button class="btn" onclick="saveCollaboratorAccess('${id}')">Save</button><button class="btn-ghost" onclick="closeModal()">Cancel</button></div>`)}
 async function saveCollaboratorAccess(id){const c=collaborators.find(x=>x.id===id);if(!c)return;const chosen=Array.from(document.querySelectorAll('.editBizChk:checked')).map(el=>el.value),name=document.getElementById('editCollabName').value.trim();if(!chosen.length){showToast('Kam se kam ek business select karein');return}try{await window.beAuth.manageCollaborator({action:'update_access',userId:id,name,businessIds:chosen});closeModal();await refreshCollaborators();showToast('Access updated ✅')}catch(e){showToast(e.message||'Update failed')}}
-async function resendCollaboratorInvite(id){openConfirm('Fresh invitation email dobara bhej dein?',async()=>{try{await window.beAuth.manageCollaborator({action:'resend_invite',userId:id});await refreshCollaborators();showToast('Fresh invitation sent ✅')}catch(e){showToast(e.message||'Resend failed')}},{label:'Yes, Resend',danger:false})}
+async function resendCollaboratorInvite(id){
+  const c=collaborators.find(x=>x.id===id);
+  if(!c)return;
+  openConfirm('Fresh invitation email dobara bhej dein?',async()=>{
+    try{
+      await window.beAuth.manageCollaborator({action:'resend_invite',userId:id,email:c.email});
+      await refreshCollaborators();
+      showToast('Invitation email triggered ✅');
+    }catch(e){showToast(e.message||'Resend failed')}
+  },{label:'Yes, Resend',danger:false})
+}
 async function disableCollaborator(id){openConfirm('Is collaborator ka login disable kar dein?',async()=>{try{await window.beAuth.manageCollaborator({action:'disable',userId:id});await refreshCollaborators();showToast('Collaborator disabled')}catch(e){showToast(e.message||'Disable failed')}},{label:'Yes, Disable'})}
 async function removeCollaborator(id){openConfirm('Is collaborator ko permanently remove kar dein?',async()=>{try{await window.beAuth.manageCollaborator({action:'remove',userId:id});await refreshCollaborators();showToast('Collaborator removed')}catch(e){showToast(e.message||'Remove failed')}},{label:'Yes, Remove'})}
 
@@ -1202,6 +1282,7 @@ function openSidebar(){
 function closeSidebar(){
   document.getElementById('sidebarOverlay').classList.remove('show');
   document.getElementById('sidebar').classList.remove('show');
+  syncMobileNavToView();
 }
 function renderSidebarContent(){
   const isLight = document.body.classList.contains('light-theme');
@@ -1214,7 +1295,7 @@ function renderSidebarContent(){
     <div class="menu-avatar-row">
       <div class="menu-avatar" onclick="triggerAvatarUpload()" title="Tap to change photo">
         ${avatarInner}
-        <span class="cam-badge">📷</span>
+        <span class="cam-badge">+</span>
       </div>
       <input type="file" id="avatarFileInput" accept="image/*" style="display:none" onchange="handleAvatarUpload(event)">
       <div>
@@ -1223,19 +1304,10 @@ function renderSidebarContent(){
       </div>
     </div>
 
-    <button class="menu-item accent" onclick="goHome();"><span class="mi-icon">🏠</span> Home</button>
-
-    ${!isPwaStandalone() ? `<button class="menu-item" onclick="closeSidebar(); installPWA();"><span class="mi-icon">📲</span> Install App</button>` : ''}
-
-    <button class="menu-item" onclick="closeSidebar(); openProfileModal();"><span class="mi-icon">👤</span> Profile</button>
-
-    <button class="menu-item" onclick="toggleTheme()">
-      <span class="mi-icon">${isLight?'☀️':'🌙'}</span> Light Theme
-      <span class="mi-right"><span class="menu-toggle ${isLight?'on':''}"><span class="knob"></span></span></span>
-    </button>
+    <button class="menu-item accent" onclick="mobileNavHome();">${uiIcon('home')}<span>Home</span></button>
 
     <details class="sidebar-details" ${sidebarBizOpen?'open':''} ontoggle="sidebarBizOpen=this.open">
-      <summary><span class="mi-icon">🏢</span> Businesses (${myBusinesses().length})</summary>
+      <summary>${uiIcon('business')}<span>Businesses (${myBusinesses().length})</span></summary>
       <div style="padding:4px 8px 8px 40px">
         ${accessMode==='owner' ? `<button class="btn" style="width:100%; margin-bottom:10px" onclick="openAddBusinessModal()">+ Add Business</button>` : ''}
         <div class="sidebar-biz-list" style="padding-left:0">
@@ -1243,16 +1315,26 @@ function renderSidebarContent(){
               <span onclick="closeSidebar(); openBiz('${b.id}')">${b.icon} ${esc2(b.name)}</span>
               ${accessMode==='owner' ? `<span class="sidebar-biz-actions">
                   <button class="icon-btn" onclick="openEditBusinessModal('${b.id}')" title="Edit">✎</button>
-                  <button class="icon-btn" onclick="confirmDeleteBusiness('${b.id}')" title="Delete">🗑</button>
+                  <button class="icon-btn" onclick="confirmDeleteBusiness('${b.id}')" title="Delete">×</button>
                 </span>` : ''}
-            </div>`).join('') || `<div style="font-size:12px; color:var(--sub)">Koi business nahi hai</div>`}
+            </div>`).join('') || `<div style="font-size:12px; color:var(--sub)">No businesses assigned</div>`}
         </div>
       </div>
     </details>
 
-    <button class="menu-item" onclick="closeSidebar(); signOut();"><span class="mi-icon">🔓</span> Logout</button>
-    <button class="menu-item" onclick="closeSidebar(); openAboutModal();"><span class="mi-icon">ℹ️</span> About App</button>
-    <button class="menu-item" onclick="closeSidebar(); shareApp();"><span class="mi-icon">🔗</span> Share App</button>
+    <button class="menu-item" onclick="closeSidebar(); openReminders();">${uiIcon('bell')}<span>Reminders</span></button>
+    ${accessMode==='owner' ? `<button class="menu-item" onclick="closeSidebar(); openCollaborators();">${uiIcon('users')}<span>Collaborators</span>${collaborators.filter(c=>c.status==='invited').length?`<span class="menu-count">${collaborators.filter(c=>c.status==='invited').length}</span>`:''}</button>` : ''}
+    <button class="menu-item" onclick="closeSidebar(); openProfileModal();">${uiIcon('user')}<span>Profile</span></button>
+
+    <button class="menu-item" onclick="toggleTheme()">
+      ${uiIcon('theme')}<span>${isLight?'Dark Theme':'Light Theme'}</span>
+      <span class="mi-right"><span class="menu-toggle ${isLight?'on':''}"><span class="knob"></span></span></span>
+    </button>
+
+    ${!isPwaStandalone() ? `<button class="menu-item" onclick="closeSidebar(); installPWA();">${uiIcon('install')}<span>Install App</span></button>` : ''}
+    <button class="menu-item" onclick="closeSidebar(); shareApp();">${uiIcon('share')}<span>Share App</span></button>
+    <button class="menu-item" onclick="closeSidebar(); openAboutModal();">${uiIcon('info')}<span>About App</span></button>
+    <button class="menu-item logout-item" onclick="closeSidebar(); signOut();">${uiIcon('logout')}<span>Logout</span></button>
   </div>`;
   document.getElementById('sidebarContent').innerHTML = html;
 }
@@ -1544,6 +1626,7 @@ async function toggleActive(id){
 
 /* ===================== REMINDERS: VIEW ===================== */
 function openReminders(){
+  setMobileNavActive('reminders');
   currentView = 'reminders';
   currentBiz = null;
   renderReminders();
