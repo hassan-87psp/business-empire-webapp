@@ -17,10 +17,10 @@ if ('caches' in window) {
   caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('business-empire-pwa-')).map(k => caches.delete(k)))).catch(()=>{});
 }
 </script>
-<script defer src="app-config.js?v=12"></script>
-<script defer src="auth-client.js?v=12"></script>
-<script defer src="storage-adapter.js?v=12"></script>
-<script defer src="app.js?v=12"></script>
+<script defer src="app-config.js?v=13"></script>
+<script defer src="auth-client.js?v=13"></script>
+<script defer src="storage-adapter.js?v=13"></script>
+<script defer src="app.js?v=13"></script>
 <style>
 :root{
   --bg:#0B0E11; --bg2:#12151A; --card:#181A20; --card2:#1E2128;
