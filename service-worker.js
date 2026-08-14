@@ -1,6 +1,6 @@
-const CACHE_NAME = 'business-empire-pwa-v9';
+const CACHE_NAME = 'business-empire-pwa-v10';
 const APP_SHELL = [
-  './', './index.html', './app-config.js?v=9', './auth-client.js?v=9', './storage-adapter.js?v=9', './app.js?v=9',
+  './', './index.html', './app-config.js?v=10', './auth-client.js?v=10', './storage-adapter.js?v=10', './app.js?v=10',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'
 ];
 self.addEventListener('install', event => {

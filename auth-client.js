@@ -1,4 +1,4 @@
-/* Business Empire Auth Client v9 — Supabase Auth + owner/collaborator roles. */
+/* Business Empire Auth Client v10 — Supabase Auth + owner/collaborator roles. */
 (function(){
   'use strict';
   const cfg = window.BUSINESS_EMPIRE_CONFIG || {};
@@ -202,13 +202,13 @@
       }else throw e;
     }
 
-    if(String(result?.backendVersion||'')!=='9.0.0'){
-      throw new Error('Backend update required. Deploy manage-collaborator V9 in Supabase, then try again.');
+    if(String(result?.backendVersion||'')!=='10.0.0'){
+      throw new Error('Backend update required. Deploy manage-collaborator V10 in Supabase, then try again.');
     }
     if((payload?.action==='invite' || payload?.action==='resend_invite') && result?.emailSent!==true){
       throw new Error(result?.emailError || 'Invitation email was not confirmed as sent.');
     }
     return result;
   }
-  window.beAuth={initialize,signIn,signOut,sendPasswordReset,updatePassword,updateMyProfile,listCollaborators,manageCollaborator,fetchProfile,fetchAccess,activateMyProfile,ensureFresh,getAccessToken,getUserId,getUser,getProfile,getBusinessIds,isOwner,isAuthenticated,getCallbackType:()=>callbackType,getCallbackError:()=>callbackError,siteUrl,version:'9.0.0'};
+  window.beAuth={initialize,signIn,signOut,sendPasswordReset,updatePassword,updateMyProfile,listCollaborators,manageCollaborator,fetchProfile,fetchAccess,activateMyProfile,ensureFresh,getAccessToken,getUserId,getUser,getProfile,getBusinessIds,isOwner,isAuthenticated,getCallbackType:()=>callbackType,getCallbackError:()=>callbackError,siteUrl,version:'10.0.0'};
 })();
