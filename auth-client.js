@@ -202,13 +202,13 @@
       }else throw e;
     }
 
-    if(String(result?.backendVersion||'')!=='10.0.0'){
-      throw new Error('Backend update required. Deploy manage-collaborator V10 in Supabase, then try again.');
+    if(String(result?.backendVersion||'')!=='11.0.0'){
+      throw new Error('Backend update required. Deploy manage-collaborator V11 in Supabase, then try again.');
     }
     if((payload?.action==='invite' || payload?.action==='resend_invite') && result?.emailSent!==true){
       throw new Error(result?.emailError || 'Invitation email was not confirmed as sent.');
     }
     return result;
   }
-  window.beAuth={initialize,signIn,signOut,sendPasswordReset,updatePassword,updateMyProfile,listCollaborators,manageCollaborator,fetchProfile,fetchAccess,activateMyProfile,ensureFresh,getAccessToken,getUserId,getUser,getProfile,getBusinessIds,isOwner,isAuthenticated,getCallbackType:()=>callbackType,getCallbackError:()=>callbackError,siteUrl,version:'10.0.0'};
+  window.beAuth={initialize,signIn,signOut,sendPasswordReset,updatePassword,updateMyProfile,listCollaborators,manageCollaborator,fetchProfile,fetchAccess,activateMyProfile,ensureFresh,getAccessToken,getUserId,getUser,getProfile,getBusinessIds,isOwner,isAuthenticated,getCallbackType:()=>callbackType,getCallbackError:()=>callbackError,siteUrl,version:'11.0.0'};
 })();
