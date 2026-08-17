@@ -15,6 +15,20 @@ let BUSINESSES = [];
 const BIZ_COLOR_PALETTE = ['#F0B90B','#0ECB81','#3B82F6','#22D3EE','#84CC16','#F97316','#14B8A6','#EAB308','#EC4899','#818CF8','#F6465D','#A78BFA'];
 const BIZ_ICON_SUGGESTIONS = ['💼','🤝','📈','💻','📱','👷','🍽️','🕋','🎓','📊','🛂','🏗️','🚗','🏥','📦','⚖️','🏦','🛒'];
 
+const BUSINESS_LOGOS = {
+  dp:'business-logos/d-prime.png',
+  pipsepaisa:'business-logos/pipsepaisa.png',
+  hassan:'business-logos/hassan-bina.png',
+  kebaabish:'business-logos/kebaabish.png',
+  k24:'business-logos/24k.png',
+  umrah:'business-logos/hamara-umrah.png'
+};
+function businessMarkHTML(b, className='biz-logo-img'){
+  const src = BUSINESS_LOGOS[b?.id];
+  if(src) return `<img src="${src}" alt="${esc2(b.name)} logo" class="${className}">`;
+  return `<span class="business-emoji">${esc2(b?.icon||'💼')}</span>`;
+}
+
 const EXPENSE_CATS_DEFAULT = ['Marketing','Salaries/Team','Rent & Office','Software/Tools','Travel','Personal Purchase','Bank/Transaction Fees','Utilities','Other'];
 const INCOME_CATS_DEFAULT  = ['Client Payment','Product/Service Sale','Commission','Partner Share','Other Income'];
 const CURRENCIES = ['RM','PKR','USD'];
@@ -121,12 +135,12 @@ async function installPWA(){
   if(isiOS){
     openModal(`
       <h3>📲 Install Business Empire <span class="modal-close" onclick="closeModal()">✕</span></h3>
-      <p style="font-size:13px; color:var(--sub); line-height:1.7">Safari mein <b>Share</b> button tap karein, phir <b>Add to Home Screen</b> select karein.</p>
+      <p style="font-size:13px; color:var(--sub); line-height:1.7">In Safari, tap the <b>Share</b> button, then select <b>Add to Home Screen</b>.</p>
       <div class="modal-actions"><button class="btn" onclick="closeModal()">Got it</button></div>`);
   } else {
     openModal(`
       <h3>📲 Install Business Empire <span class="modal-close" onclick="closeModal()">✕</span></h3>
-      <p style="font-size:13px; color:var(--sub); line-height:1.7">Browser menu mein <b>Install app</b> ya <b>Add to Home Screen</b> choose karein. Agar install option available hoga to browser usay show karega.</p>
+      <p style="font-size:13px; color:var(--sub); line-height:1.7">From your browser menu, choose <b>Install app</b> or <b>Add to Home Screen</b>. If installation is available, your browser will show the option.</p>
       <div class="modal-actions"><button class="btn" onclick="closeModal()">Got it</button></div>`);
   }
 }
@@ -467,7 +481,7 @@ function renderDashboard(){
       <div class="drag-handle" title="Drag to reorder">⋮⋮</div>
       <div class="biz-num">${idx+1}</div>
       <div class="biz-top">
-        <div class="biz-icon">${b.icon}</div>
+        <div class="biz-icon">${businessMarkHTML(b,'biz-logo-img')}</div>
         <div><div class="biz-name">${b.name}</div><div class="biz-tag">${b.tag}</div></div>
       </div>
       <div class="biz-stats">
@@ -615,7 +629,7 @@ function openBizAndHistory(bizId, txnId){
 
 /* ===================== RENDER: BUSINESS DETAIL ===================== */
 function openBiz(id){
-  if(!canAccessBiz(id)){ showToast('Aapko is business ka access nahi hai'); return; }
+  if(!canAccessBiz(id)){ showToast('You do not have access to this business'); return; }
   currentBiz = id; currentTab = 'overview'; currentView = 'business';
   setMobileNavActive('businesses');
   renderBizDetail();
@@ -637,7 +651,7 @@ function renderBizDetail(){
 
   let html = `
   <div class="detail-header">
-    <div class="detail-icon" style="background:color-mix(in srgb, ${b.color} 20%, transparent)">${b.icon}</div>
+    <div class="detail-icon" style="background:color-mix(in srgb, ${b.color} 20%, transparent)">${businessMarkHTML(b,'detail-logo-img')}</div>
     <div class="detail-title"><h2>${b.name}</h2><p>${b.tag}</p></div>
   </div>
   <div class="tabs" style="--accent:${b.color}">
@@ -783,7 +797,7 @@ function buildTxnSectionHTML(b, data, type){
       <button class="btn" style="background:${isIncome?'#0ECB81':'#F6465D'}" onclick="addTxn('${type}')">+ Add</button>
     </div>
     ${isIncome? `<div class="field" style="max-width:420px; margin-bottom:14px">
-      <label>Source — Kahan se aya? (required)</label>
+      <label>Source — Where did it come from? (required)</label>
       <input type="text" id="f_source_${type}" placeholder="e.g. Client Ahmed / DP commission / Partner ABC deal">
     </div>` : ''}
     <button class="btn-add-cat" onclick="addCategory('${type}')">+ Add custom category</button>
@@ -903,7 +917,7 @@ async function addTxn(type){
   const isIncome = type==='income';
   const source = isIncome ? (document.getElementById('f_source_'+type).value.trim()) : '';
   if(!amount || amount<=0){ showToast('Enter a valid amount'); return; }
-  if(isIncome && !source){ showToast('Please enter the Source — kahan se aya hai?'); return; }
+  if(isIncome && !source){ showToast('Please enter the income source.'); return; }
   bizData[currentBiz].transactions.push({id:uid(), type, date, category, description, amount, currency, source, createdAt:nowISO(), history:[]});
   await saveBiz(currentBiz);
   showToast((isIncome?'Income':'Expense')+' added');
@@ -986,7 +1000,7 @@ function editTxn(id){
     <div class="modal-field"><label>Category</label>
       <select id="e_cat">${cats.map(c=>`<option value="${c}" ${c===t.category?'selected':''}>${c}</option>`).join('')}</select>
     </div>
-    ${isIncome? `<div class="modal-field"><label>Source — Kahan se aya?</label><input type="text" id="e_source" value="${(t.source||'').replace(/"/g,'&quot;')}"></div>` : ''}
+    ${isIncome? `<div class="modal-field"><label>Source — Where did it come from?</label><input type="text" id="e_source" value="${(t.source||'').replace(/"/g,'&quot;')}"></div>` : ''}
     <div class="modal-field"><label>Description</label><input type="text" id="e_desc" value="${(t.description||'').replace(/"/g,'&quot;')}"></div>
     <div class="modal-field"><label>Amount</label><input type="number" id="e_amt" value="${t.amount}" step="0.01"></div>
     <div class="modal-field"><label>Currency</label>
@@ -1017,7 +1031,7 @@ function saveEditTxn(id){
   const changes = {};
   Object.keys(newVals).forEach(k=>{ if(String(t[k]) !== String(newVals[k])) changes[k] = {from:t[k], to:newVals[k]}; });
   if(Object.keys(changes).length===0){ showToast('No changes made'); closeModal(); return; }
-  openConfirm('Ye changes save kar dein?', async ()=>{
+  openConfirm('Save these changes?', async ()=>{
     t.history = t.history || [];
     t.history.push({editedAt: nowISO(), changes});
     Object.assign(t, newVals);
@@ -1057,7 +1071,7 @@ function saveEditBSItem(kind, id){
   const changes = {};
   Object.keys(newVals).forEach(k=>{ if(String(item[k]) !== String(newVals[k])) changes[k] = {from:item[k], to:newVals[k]}; });
   if(Object.keys(changes).length===0){ showToast('No changes made'); closeModal(); return; }
-  openConfirm('Ye changes save kar dein?', async ()=>{
+  openConfirm('Save these changes?', async ()=>{
     item.history = item.history || [];
     item.history.push({editedAt: nowISO(), changes});
     Object.assign(item, newVals);
@@ -1123,8 +1137,8 @@ function renderGate(){
 async function tryAuthLogin(){
   const email=document.getElementById('loginEmail')?.value.trim();
   const password=document.getElementById('loginPassword')?.value||'';
-  if(!email||!email.includes('@')){showToast('Valid email daalein');return}
-  if(!password){showToast('Password daalein');return}
+  if(!email||!email.includes('@')){showToast('Enter a valid email address');return}
+  if(!password){showToast('Enter your password');return}
   const btn=document.getElementById('loginBtn'); if(btn){btn.disabled=true;btn.textContent='Signing in…'}
   try{
     await window.beAuth.signIn(email,password);
@@ -1142,9 +1156,9 @@ function renderForgotPassword(){
   </div></div>`;
 }
 async function sendResetEmail(){
-  const email=document.getElementById('resetEmail')?.value.trim(); if(!email||!email.includes('@')){showToast('Valid email daalein');return}
+  const email=document.getElementById('resetEmail')?.value.trim(); if(!email||!email.includes('@')){showToast('Enter a valid email address');return}
   const btn=document.getElementById('resetBtn'); if(btn){btn.disabled=true;btn.textContent='Sending…'}
-  try{await window.beAuth.sendPasswordReset(email);document.getElementById('app').innerHTML=`<div class="gate-wrap"><div class="gate-card"><h2>Check Your Email</h2><p>Password reset link <b style="color:var(--text)">${esc2(email)}</b> par bhej diya gaya hai.</p><button class="btn" style="width:100%" onclick="renderGate()">Back to Login</button></div></div>`}catch(e){showToast(e.message||'Email send failed');if(btn){btn.disabled=false;btn.textContent='Send Reset Email'}}
+  try{await window.beAuth.sendPasswordReset(email);document.getElementById('app').innerHTML=`<div class="gate-wrap"><div class="gate-card"><h2>Check Your Email</h2><p>A password reset link has been sent to <b style="color:var(--text)">${esc2(email)}</b>.</p><button class="btn" style="width:100%" onclick="renderGate()">Back to Login</button></div></div>`}catch(e){showToast(e.message||'Email send failed');if(btn){btn.disabled=false;btn.textContent='Send Reset Email'}}
 }
 function renderSetPasswordScreen(type){
   hideAppChrome();
@@ -1159,8 +1173,8 @@ function renderSetPasswordScreen(type){
 }
 async function completePasswordSetup(){
   const p1=document.getElementById('setPass1')?.value||'',p2=document.getElementById('setPass2')?.value||'';
-  if(p1.length<8){showToast('Password kam se kam 8 characters ka rakhein');return}
-  if(p1!==p2){showToast('Passwords match nahi kar rahe');return}
+  if(p1.length<8){showToast('Password must be at least 8 characters');return}
+  if(p1!==p2){showToast('Passwords do not match');return}
   const btn=document.getElementById('setPassBtn'); if(btn){btn.disabled=true;btn.textContent='Saving…'}
   try{await window.beAuth.updatePassword(p1);showToast('Password set ✅');await startAuthenticatedApp()}catch(e){showToast(e.message||'Password set failed');if(btn){btn.disabled=false;btn.textContent='Save Password'}}
 }
@@ -1228,29 +1242,29 @@ function openAddCollaboratorModal(){
   openModal(`<h3>Add Collaborator <span class="modal-close" onclick="closeModal()">✕</span></h3>
     <div class="modal-field"><label>Name</label><input type="text" id="newCollabName" placeholder="e.g. Ali"></div>
     <div class="modal-field"><label>Email</label><input type="email" id="newCollabEmail" placeholder="collaborator@example.com"></div>
-    <div class="mini-label">Business Access</div><div class="biz-check-list">${BUSINESSES.map(b=>`<label class="biz-check-item"><input type="checkbox" value="${b.id}" class="newCollabChk"> ${b.icon} ${b.name}</label>`).join('')}</div>
+    <div class="mini-label">Business Access</div><div class="biz-check-list">${BUSINESSES.map(b=>`<label class="biz-check-item"><input type="checkbox" value="${b.id}" class="newCollabChk"> ${businessMarkHTML(b,'biz-check-logo')} ${b.name}</label>`).join('')}</div>
     <div class="email-note">An invitation email will be sent automatically. The user must open it and set a password before logging in.</div>
     <div class="modal-actions"><button class="btn" id="inviteCollabBtn" onclick="saveNewCollaborator()">Send Invitation</button><button class="btn-ghost" onclick="closeModal()">Cancel</button></div>`)
 }
 async function saveNewCollaborator(){
   const email=document.getElementById('newCollabEmail').value.trim().toLowerCase(),name=document.getElementById('newCollabName').value.trim();
   const chosen=Array.from(document.querySelectorAll('.newCollabChk:checked')).map(el=>el.value);
-  if(!email||!email.includes('@')){showToast('Valid email daalein');return}if(!name){showToast('Name daalein');return}if(!chosen.length){showToast('Kam se kam ek business select karein');return}
+  if(!email||!email.includes('@')){showToast('Enter a valid email address');return}if(!name){showToast('Enter a name');return}if(!chosen.length){showToast('Select at least one business');return}
   const btn=document.getElementById('inviteCollabBtn');if(btn){btn.disabled=true;btn.textContent='Sending…'}
   // Do not keep the owner trapped behind a modal while the email provider finishes.
-  closeModal();showToast('Invitation send ho rahi hai…');
+  closeModal();showToast('Sending invitation…');
   try{
     await window.beAuth.manageCollaborator({action:'invite',email,name,businessIds:chosen});
     showToast('Invitation email sent ✅');
     refreshCollaborators().catch(()=>{});
-  }catch(e){showToast((e.message||'Invite failed')+' — dobara try karein')}
+  }catch(e){showToast((e.message||'Invite failed')+' — please try again')}
 }
-function editCollaboratorAccess(id){const c=collaborators.find(x=>x.id===id);if(!c)return;openModal(`<h3>Edit Access — ${esc2(c.name||c.email)} <span class="modal-close" onclick="closeModal()">✕</span></h3><div class="modal-field"><label>Name</label><input type="text" id="editCollabName" value="${esc(c.name||'')}"></div><div class="biz-check-list">${BUSINESSES.map(b=>`<label class="biz-check-item"><input type="checkbox" value="${b.id}" class="editBizChk" ${(c.businessIds||[]).includes(b.id)?'checked':''}> ${b.icon} ${b.name}</label>`).join('')}</div><div class="modal-actions"><button class="btn" onclick="saveCollaboratorAccess('${id}')">Save</button><button class="btn-ghost" onclick="closeModal()">Cancel</button></div>`)}
-async function saveCollaboratorAccess(id){const c=collaborators.find(x=>x.id===id);if(!c)return;const chosen=Array.from(document.querySelectorAll('.editBizChk:checked')).map(el=>el.value),name=document.getElementById('editCollabName').value.trim();if(!chosen.length){showToast('Kam se kam ek business select karein');return}try{await window.beAuth.manageCollaborator({action:'update_access',userId:id,name,businessIds:chosen});closeModal();await refreshCollaborators();showToast('Access updated ✅')}catch(e){showToast(e.message||'Update failed')}}
+function editCollaboratorAccess(id){const c=collaborators.find(x=>x.id===id);if(!c)return;openModal(`<h3>Edit Access — ${esc2(c.name||c.email)} <span class="modal-close" onclick="closeModal()">✕</span></h3><div class="modal-field"><label>Name</label><input type="text" id="editCollabName" value="${esc(c.name||'')}"></div><div class="biz-check-list">${BUSINESSES.map(b=>`<label class="biz-check-item"><input type="checkbox" value="${b.id}" class="editBizChk" ${(c.businessIds||[]).includes(b.id)?'checked':''}> ${businessMarkHTML(b,'biz-check-logo')} ${b.name}</label>`).join('')}</div><div class="modal-actions"><button class="btn" onclick="saveCollaboratorAccess('${id}')">Save</button><button class="btn-ghost" onclick="closeModal()">Cancel</button></div>`)}
+async function saveCollaboratorAccess(id){const c=collaborators.find(x=>x.id===id);if(!c)return;const chosen=Array.from(document.querySelectorAll('.editBizChk:checked')).map(el=>el.value),name=document.getElementById('editCollabName').value.trim();if(!chosen.length){showToast('Select at least one business');return}try{await window.beAuth.manageCollaborator({action:'update_access',userId:id,name,businessIds:chosen});closeModal();await refreshCollaborators();showToast('Access updated ✅')}catch(e){showToast(e.message||'Update failed')}}
 async function resendCollaboratorInvite(id){
   const c=collaborators.find(x=>x.id===id);
   if(!c)return;
-  openConfirm('Fresh invitation email dobara bhej dein?',async()=>{
+  openConfirm('Send a fresh invitation email?',async()=>{
     try{
       await window.beAuth.manageCollaborator({action:'resend_invite',userId:id,email:c.email});
       await refreshCollaborators();
@@ -1258,8 +1272,8 @@ async function resendCollaboratorInvite(id){
     }catch(e){showToast(e.message||'Resend failed')}
   },{label:'Yes, Resend',danger:false})
 }
-async function disableCollaborator(id){openConfirm('Is collaborator ka login disable kar dein?',async()=>{try{await window.beAuth.manageCollaborator({action:'disable',userId:id});await refreshCollaborators();showToast('Collaborator disabled')}catch(e){showToast(e.message||'Disable failed')}},{label:'Yes, Disable'})}
-async function removeCollaborator(id){openConfirm('Is collaborator ko permanently remove kar dein?',async()=>{try{await window.beAuth.manageCollaborator({action:'remove',userId:id});await refreshCollaborators();showToast('Collaborator removed')}catch(e){showToast(e.message||'Remove failed')}},{label:'Yes, Remove'})}
+async function disableCollaborator(id){openConfirm("Disable this collaborator's login?",async()=>{try{await window.beAuth.manageCollaborator({action:'disable',userId:id});await refreshCollaborators();showToast('Collaborator disabled')}catch(e){showToast(e.message||'Disable failed')}},{label:'Yes, Disable'})}
+async function removeCollaborator(id){openConfirm('Permanently remove this collaborator?',async()=>{try{await window.beAuth.manageCollaborator({action:'remove',userId:id});await refreshCollaborators();showToast('Collaborator removed')}catch(e){showToast(e.message||'Remove failed')}},{label:'Yes, Remove'})}
 
 /* ===================== THEME (Light / Dark) ===================== */
 async function applySavedTheme(){
@@ -1312,7 +1326,7 @@ function renderSidebarContent(){
         ${accessMode==='owner' ? `<button class="btn" style="width:100%; margin-bottom:10px" onclick="openAddBusinessModal()">+ Add Business</button>` : ''}
         <div class="sidebar-biz-list" style="padding-left:0">
           ${myBusinesses().map(b=>`<div class="sidebar-biz-item">
-              <span onclick="closeSidebar(); openBiz('${b.id}')">${b.icon} ${esc2(b.name)}</span>
+              <span onclick="closeSidebar(); openBiz('${b.id}')">${businessMarkHTML(b,'sidebar-biz-logo')} ${esc2(b.name)}</span>
               ${accessMode==='owner' ? `<span class="sidebar-biz-actions">
                   <button class="icon-btn" onclick="openEditBusinessModal('${b.id}')" title="Edit">✎</button>
                   <button class="icon-btn" onclick="confirmDeleteBusiness('${b.id}')" title="Delete">×</button>
@@ -1344,8 +1358,8 @@ function triggerAvatarUpload(){
 function handleAvatarUpload(e){
   const file = e.target.files[0];
   if(!file) return;
-  if(!file.type.startsWith('image/')){ showToast('Sirf image files allowed hain'); return; }
-  if(file.size > 3*1024*1024){ showToast('Image 3MB se choti honi chahiye'); return; }
+  if(!file.type.startsWith('image/')){ showToast('Only image files are allowed'); return; }
+  if(file.size > 3*1024*1024){ showToast('Image must be smaller than 3 MB'); return; }
   const reader = new FileReader();
   reader.onload = async function(ev){
     myAvatar = ev.target.result;
@@ -1395,7 +1409,7 @@ async function saveNewBusiness(){
   const tag = document.getElementById('biz_tag').value.trim();
   const icon = document.getElementById('biz_icon').value.trim() || '💼';
   const color = document.getElementById('biz_color').value;
-  if(!name){ showToast('Business ka naam daalein'); return; }
+  if(!name){ showToast('Enter a business name'); return; }
   let id = name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') || 'biz';
   if(BUSINESSES.some(b=>b.id===id)) id = id + '-' + uid().slice(0,4);
   const newBiz = {id, name, tag, icon, color};
@@ -1428,8 +1442,8 @@ function saveEditBusiness(id){
   const tag = document.getElementById('biz_tag').value.trim();
   const icon = document.getElementById('biz_icon').value.trim() || '💼';
   const color = document.getElementById('biz_color').value;
-  if(!name){ showToast('Business ka naam daalein'); return; }
-  openConfirm(`"${esc2(name)}" ki details update kar dein?`, async ()=>{
+  if(!name){ showToast('Enter a business name'); return; }
+  openConfirm(`Update the details for "${esc2(name)}"?`, async ()=>{
     b.name = name; b.tag = tag; b.icon = icon; b.color = color;
     await saveBusinessesList();
     closeModal();
@@ -1443,7 +1457,7 @@ function saveEditBusiness(id){
 function confirmDeleteBusiness(id){
   const b = BUSINESSES.find(x=>x.id===id);
   if(!b) return;
-  openConfirm(`"${esc2(b.name)}" ko delete kar dein? Iska saara income/expense/balance sheet data bhi hamesha ke liye chala jayega — ye wapis nahi aa sakta.`, async ()=>{
+  openConfirm(`Delete "${esc2(b.name)}"? All of its income, expense, and balance sheet data will be permanently deleted and cannot be restored.`, async ()=>{
     BUSINESSES = BUSINESSES.filter(x=>x.id!==id);
     delete bizData[id];
     bizOrderState.order = bizOrderState.order.filter(x=>x!==id);
@@ -1471,9 +1485,9 @@ function openProfileModal(){
     <div class="modal-actions"><button class="btn" onclick="confirmSaveProfile()">Save Changes</button><button class="btn-ghost" onclick="closeModal()">Cancel</button></div>
     <div style="border-top:1px solid var(--border);margin-top:18px;padding-top:16px"><div class="mini-label">Security</div><button class="btn-ghost" style="width:100%" onclick="openChangePasswordModal()">🔑 Change Password</button></div>`)
 }
-function confirmSaveProfile(){const name=document.getElementById('pf_name').value.trim(),phone=document.getElementById('pf_phone').value.trim();openConfirm('Profile changes save kar dein?',async()=>{try{const p=await window.beAuth.updateMyProfile(name,phone);ownerProfile={name:p.name||'',email:p.email||myEmail,phone:p.phone||''};if(accessMode==='owner')collaborators=await loadCollaborators();closeModal();renderSidebarContent();showToast('Profile updated ✅')}catch(e){showToast(e.message||'Save failed')}},{label:'Yes, Save Changes',danger:false})}
+function confirmSaveProfile(){const name=document.getElementById('pf_name').value.trim(),phone=document.getElementById('pf_phone').value.trim();openConfirm('Save profile changes?',async()=>{try{const p=await window.beAuth.updateMyProfile(name,phone);ownerProfile={name:p.name||'',email:p.email||myEmail,phone:p.phone||''};if(accessMode==='owner')collaborators=await loadCollaborators();closeModal();renderSidebarContent();showToast('Profile updated ✅')}catch(e){showToast(e.message||'Save failed')}},{label:'Yes, Save Changes',danger:false})}
 function openChangePasswordModal(){openModal(`<h3>Change Password <span class="modal-close" onclick="closeModal()">✕</span></h3><div class="modal-field"><label>New Password</label><input type="password" id="cp1" autocomplete="new-password"></div><div class="modal-field"><label>Confirm New Password</label><input type="password" id="cp2" autocomplete="new-password"></div><div class="modal-actions"><button class="btn" onclick="confirmChangePassword()">Update Password</button><button class="btn-ghost" onclick="closeModal()">Cancel</button></div>`)}
-async function confirmChangePassword(){const p1=document.getElementById('cp1').value,p2=document.getElementById('cp2').value;if(p1.length<8){showToast('Password kam se kam 8 characters ka rakhein');return}if(p1!==p2){showToast('Passwords match nahi kar rahe');return}try{await window.beAuth.updatePassword(p1);closeModal();showToast('Password updated ✅')}catch(e){showToast(e.message||'Password update failed')}}
+async function confirmChangePassword(){const p1=document.getElementById('cp1').value,p2=document.getElementById('cp2').value;if(p1.length<8){showToast('Password must be at least 8 characters');return}if(p1!==p2){showToast('Passwords do not match');return}try{await window.beAuth.updatePassword(p1);closeModal();showToast('Password updated ✅')}catch(e){showToast(e.message||'Password update failed')}}
 
 /* ===================== ABOUT / SHARE ===================== */
 function openAboutModal(){
@@ -1482,7 +1496,7 @@ function openAboutModal(){
     <div style="font-size:13.5px; line-height:1.7; color:var(--text)">
       <p style="font-weight:800; font-size:16px; margin-bottom:4px">Business Empire</p>
       <p style="color:var(--sub); font-size:11.5px; text-transform:uppercase; letter-spacing:.6px; margin-bottom:14px">Business Command Center</p>
-      <p style="margin-bottom:10px">Ek hi jagah se aapke saare businesses ki income, expenses, balance sheet, reminders aur team collaboration manage karne ka private dashboard.</p>
+      <p style="margin-bottom:10px">A private dashboard to manage income, expenses, balance sheets, reminders, and team collaboration for all your businesses in one place.</p>
       <p style="color:var(--sub); font-size:12px">Built for Shahid's Business Empire · All data stored securely for this dashboard only</p>
     </div>
     <div class="modal-actions"><button class="btn-ghost" onclick="closeModal()">Close</button></div>`);
@@ -1491,7 +1505,7 @@ function shareApp(){
   const link = window.location.href;
   openModal(`
     <h3>🔗 Share App <span class="modal-close" onclick="closeModal()">✕</span></h3>
-    <div style="font-size:13.5px; line-height:1.6; margin-bottom:14px">Ye link kisi ko bhi bhej dein taake wo Business Empire dashboard khol sakein.</div>
+    <div style="font-size:13.5px; line-height:1.6; margin-bottom:14px">Share this link with anyone who needs to open the Business Empire dashboard.</div>
     <div class="modal-field">
       <label>App Link</label>
       <input type="text" id="shareLinkInput" value="${link}" readonly onclick="this.select()">
@@ -1505,7 +1519,7 @@ function shareApp(){
 function copyShareLink(){
   const link = window.location.href;
   if(navigator.clipboard){
-    navigator.clipboard.writeText(link).then(()=> showToast('Link copied ✅')).catch(()=> showToast('Copy nahi ho saka'));
+    navigator.clipboard.writeText(link).then(()=> showToast('Link copied ✅')).catch(()=> showToast('Could not copy the link'));
   } else {
     const el = document.getElementById('shareLinkInput');
     el.select(); document.execCommand('copy');
@@ -1513,7 +1527,7 @@ function copyShareLink(){
   }
 }
 function nativeShareApp(){
-  const shareData = { title:'Business Empire — Business Command Center', text:'Yahan se dekhein — Business Empire dashboard', url: window.location.href };
+  const shareData = { title:'Business Empire — Business Command Center', text:'Open the Business Empire dashboard', url: window.location.href };
   if(navigator.share) navigator.share(shareData).catch(()=>{});
 }
 function esc2(s){ return (s||'').replace(/</g,'&lt;'); }
@@ -1525,7 +1539,7 @@ function openReminderModal(existingId){
   const repeat = r ? r.repeat : 'once';
   const html = `
     <h3>${r?'Edit':'New'} Reminder <span class="modal-close" onclick="closeModal()">✕</span></h3>
-    <div class="modal-field"><label>Title</label><input type="text" id="rm_title" placeholder="e.g. DP team ka weekly report check" value="${r?esc(r.title):''}"></div>
+    <div class="modal-field"><label>Title</label><input type="text" id="rm_title" placeholder="e.g. Check the DP team's weekly report" value="${r?esc(r.title):''}"></div>
     <div class="modal-field"><label>Note (optional)</label><input type="text" id="rm_note" placeholder="Extra detail" value="${r?esc(r.note||''):''}"></div>
     <div class="modal-field"><label>Related Business</label><select id="rm_biz">${bizOptions}</select></div>
     <div class="modal-field"><label>Repeat</label>
@@ -1549,7 +1563,7 @@ function openReminderModal(existingId){
       <input type="checkbox" id="rm_email" style="width:auto" ${r&&r.email?'checked':''}>
       <label style="margin:0; text-transform:none; font-size:13px; color:var(--text)">Also email me when due</label>
     </div>
-    <div class="email-note">📧 Security ki wajah se koi bhi browser app khud-ba-khud silently email nahi bhej sakta. Jab reminder due hoga, ek "Send Email" button popup mein aayega — ek click se ${EMAIL_TO} ko ready-made email khul jayegi. Agar aap chahen to poori tarhan automatic (background) email ke liye main aapke liye ek chhota Google script bhi bana sakta hoon — bas bata dein.</div>
+    <div class="email-note">📧 For security reasons, a browser cannot silently send email on its own. When the reminder is due, a "Send Email" button will appear in the popup. One click will open a ready-to-send email to ${EMAIL_TO}. Fully automatic background email can be added later.</div>
     <div class="modal-actions">
       <button class="btn" onclick="saveReminder(${r?`'${r.id}'`:'null'})">${r?'Save Changes':'Create Reminder'}</button>
       ${r? `<button class="btn-ghost" onclick="deleteReminder('${r.id}')">Delete</button>`:''}
@@ -1580,7 +1594,7 @@ function saveReminder(id){
     const changes = {};
     Object.keys(newVals).forEach(k=>{ if(JSON.stringify(r[k]) !== JSON.stringify(newVals[k])) changes[k] = {from:r[k], to:newVals[k]}; });
     if(Object.keys(changes).length===0){ showToast('No changes made'); closeModal(); return; }
-    openConfirm('Ye reminder changes save kar dein?', async ()=>{
+    openConfirm('Save these reminder changes?', async ()=>{
       r.history = r.history || [];
       r.history.push({editedAt: nowISO(), changes});
       Object.assign(r, newVals);
@@ -1703,11 +1717,11 @@ function renderReminders(){
       </div>
     </div>`).join('') : `<div class="empty-state" style="padding:24px; color:var(--sub)">No recurring reminders yet</div>`;
 
-  html += `<div class="rem-section-title">🕓 Notification Log — jab jab alert baja</div>`;
+  html += `<div class="rem-section-title">🕓 Notification Log — alert history</div>`;
   html += reminderLog.length? reminderLog.slice(0,20).map(l=>`<div class="rem-item" style="padding:12px 18px">
       <div class="rem-time" style="min-width:120px; font-size:11px">${fmtDateTime(l.firedAt)}</div>
       <div class="rem-body"><div class="rem-title" style="font-size:13px">${esc2(l.title)}</div><div class="rem-sub">${bizLabel(l.business)}</div></div>
-    </div>`).join('') : `<div class="empty-state" style="padding:24px; color:var(--sub)">Koi notification abhi tak nahi baji</div>`;
+    </div>`).join('') : `<div class="empty-state" style="padding:24px; color:var(--sub)">No notifications have fired yet</div>`;
 
   document.getElementById('app').innerHTML = html;
   updateReminderBadge();
@@ -1793,7 +1807,7 @@ function showAlarmBanner(r){
     <h3>⏰ Reminder Due <span class="modal-close" onclick="closeModal()">✕</span></h3>
     <div style="font-size:16px; font-weight:800; margin-bottom:6px">${esc2(r.title)}</div>
     <div class="rem-sub" style="margin-bottom:14px">${bizName}${r.note?' · '+esc2(r.note):''} · ${r.time}</div>
-    <div style="font-size:12px; color:var(--sub); margin-bottom:8px">Dubara yaad dilana hai?</div>
+    <div style="font-size:12px; color:var(--sub); margin-bottom:8px">Remind me again?</div>
     <div class="modal-actions" style="flex-wrap:wrap">
       <button class="btn-ghost" onclick="snoozeReminder('${r.id}',15)">Snooze 15 min</button>
       <button class="btn-ghost" onclick="snoozeReminder('${r.id}',30)">Snooze 30 min</button>
@@ -1814,7 +1828,7 @@ async function snoozeReminder(id, minutes){
   r.snoozeFiredFor = null;
   await saveReminders();
   closeModal();
-  showToast('Snoozed — ' + minutes + ' minute mein dobara yaad dilaunga');
+  showToast('Snoozed for ' + minutes + ' minutes');
   if(currentView==='reminders') renderReminders();
 }
 function checkReminders(){
@@ -1860,5 +1874,5 @@ window.__BUSINESS_EMPIRE_APP_VERSION='13.0.0';
     setInterval(checkReminders,15000);setInterval(updateReminderBadge,30000);
   }catch(err){console.error('[Business Empire] Startup failed:',err);document.getElementById('app').innerHTML='<div class="gate-wrap"><div class="gate-card"><h2>App could not start</h2><p>'+esc2(err.message||'Please refresh and try again.')+'</p><button class="btn" onclick="location.reload()">Refresh App</button></div></div>'}
 })();
-if('serviceWorker'in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('./service-worker.js?v=13').then(reg=>reg.update()).catch(err=>console.warn('[Business Empire] service worker failed:',err))})}
+if('serviceWorker'in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('./service-worker.js?v=14').then(reg=>reg.update()).catch(err=>console.warn('[Business Empire] service worker failed:',err))})}
 
