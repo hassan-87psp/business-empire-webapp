@@ -1,4 +1,4 @@
-/* Business Empire Auth Client v12 — Supabase Auth + owner/collaborator roles. */
+/* Business Empire Auth Client v15 — Supabase Auth + owner/collaborator roles + transactional email events. */
 (function(){
   'use strict';
   const cfg = window.BUSINESS_EMPIRE_CONFIG || {};
@@ -138,6 +138,12 @@
     }
     await fetchAccess();
     touchLastLogin();
+    sendBusinessEmail({
+      type:'security_alert',
+      action:'New sign-in detected',
+      time:new Date().toISOString(),
+      device:(navigator.userAgent||'Browser').slice(0,180)
+    }).catch(()=>{});
     return {user,profile,businessIds:getBusinessIds()};
   }
   async function signOut(){
@@ -157,6 +163,25 @@
     user=u; if(session){session.user=u;saveSession(session)}
     await activateMyProfile(); await fetchAccess(); await touchLastLogin();
     callbackType=null;
+    sendBusinessEmail({
+      type:'security_alert',
+      action:'Your Business Empire password was changed',
+      time:new Date().toISOString(),
+      device:(navigator.userAgent||'Browser').slice(0,180)
+    }).catch(()=>{});
+    return u;
+  }
+  async function updateEmail(newEmail){
+    await ensureFresh();
+    const email=String(newEmail||'').trim().toLowerCase();
+    if(!email || !email.includes('@')) throw new Error('Enter a valid email address');
+    const u=await request(base+'/auth/v1/user',{
+      method:'PUT',
+      headers:authHeaders(getAccessToken()),
+      body:JSON.stringify({email})
+    });
+    user=u;
+    if(session){session.user=u;saveSession(session)}
     return u;
   }
   async function updateMyProfile(name,phone){
@@ -175,6 +200,32 @@
     ]);
     const map={}; (access||[]).forEach(a=>{(map[a.user_id]||(map[a.user_id]=[])).push(a.business_id)});
     return (profs||[]).map(p=>({id:p.id,email:p.email,name:p.name||'',phone:p.phone||'',status:p.status||'invited',businessIds:map[p.id]||[],requestedAt:p.created_at,inviteSentAt:p.invite_sent_at||p.created_at,lastInviteSentAt:p.last_invite_sent_at||p.invite_sent_at||p.created_at,acceptedAt:p.accepted_at||null,approvedAt:p.accepted_at||(p.status==='active'?p.updated_at:null),disabledAt:p.disabled_at||null,lastLoginAt:p.last_sign_in_at||null}));
+  }
+
+  async function sendBusinessEmail(payload){
+    if(!isAuthenticated()) throw new Error('Not signed in');
+    try{ await ensureFresh(); }
+    catch(_){ clearSession(); throw new Error('Your session expired. Please sign in again.'); }
+
+    const invoke = async ()=>{
+      const token=getAccessToken();
+      if(!token) throw new Error('Your session expired. Please sign in again.');
+      return await request(base+'/functions/v1/send-business-email',{
+        method:'POST',
+        headers:{'apikey':key,'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify(payload||{})
+      });
+    };
+
+    try{
+      return await invoke();
+    }catch(e){
+      if(e && (e.status===401 || e.status===403) && /session|token|jwt|expired/i.test(String(e.message||''))){
+        try{ await refreshSession(); return await invoke(); }
+        catch(_){ clearSession(); throw new Error('Your session expired. Please sign in again.'); }
+      }
+      throw e;
+    }
   }
 
   async function manageCollaborator(payload){
@@ -202,13 +253,7 @@
       }else throw e;
     }
 
-    if(String(result?.backendVersion||'')!=='12.0.0'){
-      throw new Error('Backend update required. Deploy manage-collaborator V12 in Supabase, then try again.');
-    }
-    if((payload?.action==='invite' || payload?.action==='resend_invite') && result?.emailSent!==true){
-      throw new Error(result?.emailError || 'Invitation email was not confirmed as sent.');
-    }
     return result;
   }
-  window.beAuth={initialize,signIn,signOut,sendPasswordReset,updatePassword,updateMyProfile,listCollaborators,manageCollaborator,fetchProfile,fetchAccess,activateMyProfile,ensureFresh,getAccessToken,getUserId,getUser,getProfile,getBusinessIds,isOwner,isAuthenticated,getCallbackType:()=>callbackType,getCallbackError:()=>callbackError,siteUrl,version:'12.0.0'};
+  window.beAuth={initialize,signIn,signOut,sendPasswordReset,updatePassword,updateEmail,updateMyProfile,listCollaborators,manageCollaborator,sendBusinessEmail,fetchProfile,fetchAccess,activateMyProfile,ensureFresh,getAccessToken,getUserId,getUser,getProfile,getBusinessIds,isOwner,isAuthenticated,getCallbackType:()=>callbackType,getCallbackError:()=>callbackError,siteUrl,version:'15.0.0'};
 })();

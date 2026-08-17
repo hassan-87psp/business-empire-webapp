@@ -1182,6 +1182,39 @@ async function signOut(){
   try{await window.beAuth.signOut()}catch(e){}
   accessMode=null;myEmail='';allowedBizIds=null;collaborators=[];bizData={};reminders=[];reminderLog=[];closeSidebar();renderGate();
 }
+function currentWeekKey(){
+  const d=new Date();
+  const oneJan=new Date(d.getFullYear(),0,1);
+  const day=Math.floor((d-oneJan)/86400000);
+  return d.getFullYear()+'-W'+String(Math.ceil((day+oneJan.getDay()+1)/7)).padStart(2,'0');
+}
+async function maybeSendWeeklySummary(){
+  if(accessMode!=='owner' || !window.beAuth?.sendBusinessEmail) return;
+  const week=currentWeekKey();
+  const markerKey='weekly-summary-sent:'+week;
+  try{
+    const existing=await window.storage.get(markerKey,true);
+    if(existing?.value) return;
+    let income=0,expense=0;
+    myBusinesses().forEach(b=>{
+      const d=bizData[b.id];
+      if(!d) return;
+      income+=totalRMFor(d.transactions||[],'income');
+      expense+=totalRMFor(d.transactions||[],'expense');
+    });
+    await window.beAuth.sendBusinessEmail({
+      type:'weekly_summary',
+      period:week,
+      currency:'RM',
+      income,
+      expense,
+      profit:income-expense
+    });
+    await window.storage.set(markerKey,new Date().toISOString(),true);
+  }catch(e){
+    console.warn('[Business Empire] weekly summary email:',e);
+  }
+}
 async function startAuthenticatedApp(){
   const p=window.beAuth.getProfile();
   if(!p){renderGate();return}
@@ -1194,6 +1227,7 @@ async function startAuthenticatedApp(){
   await Promise.all([loadBusinessesList(),loadFx()]);
   await Promise.all([loadAll(),loadOrder()]);
   proceedToApp();
+  maybeSendWeeklySummary().catch(()=>{});
   Promise.all([loadReminders(),loadLog(),loadAvatar().then(v=>{myAvatar=v})]).then(()=>{
     updateReminderBadge();
     if(document.getElementById('sidebar')?.classList.contains('open')) renderSidebarContent();
@@ -1232,7 +1266,7 @@ function renderCollaborators(){
       <div class="rem-stat overdue"><div class="l">Disabled</div><div class="v">${disabled.length}</div></div>
     </div>
     <div class="rem-toprow"><div class="email-note" style="margin:0;max-width:720px">Only users invited by the Owner can create an account. Accepted users appear under Active automatically after they set their password.</div><button class="btn" onclick="openAddCollaboratorModal()">+ Add Collaborator</button></div>
-    <div class="rem-section-title">✉️ Pending Invitations (${invited.length})</div>${invited.length?invited.map(c=>card(c,`<button class="btn-ghost" onclick="resendCollaboratorInvite('${c.id}')">Resend Invite</button><button class="btn-ghost" onclick="editCollaboratorAccess('${c.id}')">Edit Access</button><button class="btn-ghost" onclick="removeCollaborator('${c.id}')">Remove</button>`)).join(''):'<div class="empty-state" style="padding:24px">No pending invitations</div>'}
+    <div class="rem-section-title">✉️ Pending Invitations (${invited.length})</div>${invited.length?invited.map(c=>card(c,`<button class="btn-ghost" onclick="editCollaboratorAccess('${c.id}')">Edit Access</button><button class="btn-ghost" onclick="removeCollaborator('${c.id}')">Remove</button>`)).join(''):'<div class="empty-state" style="padding:24px">No pending invitations</div>'}
     <div class="rem-section-title">✅ Accepted / Active (${active.length})</div>${active.length?active.map(c=>card(c,`<button class="btn-ghost" onclick="editCollaboratorAccess('${c.id}')">Edit Access</button><button class="btn-ghost" onclick="disableCollaborator('${c.id}')">Disable</button><button class="btn-ghost" onclick="removeCollaborator('${c.id}')">Remove</button>`)).join(''):'<div class="empty-state" style="padding:24px">No collaborator has accepted an invitation yet</div>'}
     ${disabled.length?`<div class="rem-section-title">⛔ Disabled (${disabled.length})</div>${disabled.map(c=>card(c,`<button class="btn-ghost" onclick="removeCollaborator('${c.id}')">Remove</button>`)).join('')}`:''}`;
   updateCollabBadge();
@@ -1260,7 +1294,7 @@ async function saveNewCollaborator(){
   }catch(e){showToast((e.message||'Invite failed')+' — please try again')}
 }
 function editCollaboratorAccess(id){const c=collaborators.find(x=>x.id===id);if(!c)return;openModal(`<h3>Edit Access — ${esc2(c.name||c.email)} <span class="modal-close" onclick="closeModal()">✕</span></h3><div class="modal-field"><label>Name</label><input type="text" id="editCollabName" value="${esc(c.name||'')}"></div><div class="biz-check-list">${BUSINESSES.map(b=>`<label class="biz-check-item"><input type="checkbox" value="${b.id}" class="editBizChk" ${(c.businessIds||[]).includes(b.id)?'checked':''}> ${businessMarkHTML(b,'biz-check-logo')} ${b.name}</label>`).join('')}</div><div class="modal-actions"><button class="btn" onclick="saveCollaboratorAccess('${id}')">Save</button><button class="btn-ghost" onclick="closeModal()">Cancel</button></div>`)}
-async function saveCollaboratorAccess(id){const c=collaborators.find(x=>x.id===id);if(!c)return;const chosen=Array.from(document.querySelectorAll('.editBizChk:checked')).map(el=>el.value),name=document.getElementById('editCollabName').value.trim();if(!chosen.length){showToast('Select at least one business');return}try{await window.beAuth.manageCollaborator({action:'update_access',userId:id,name,businessIds:chosen});closeModal();await refreshCollaborators();showToast('Access updated ✅')}catch(e){showToast(e.message||'Update failed')}}
+async function saveCollaboratorAccess(id){const c=collaborators.find(x=>x.id===id);if(!c)return;const chosen=Array.from(document.querySelectorAll('.editBizChk:checked')).map(el=>el.value),name=document.getElementById('editCollabName').value.trim();if(!chosen.length){showToast('Select at least one business');return}const businessNames=chosen.map(x=>BUSINESSES.find(b=>b.id===x)?.name||x);try{await window.beAuth.manageCollaborator({action:'update_access',userId:id,name,businessIds:chosen,businessNames});closeModal();await refreshCollaborators();showToast('Access updated ✅')}catch(e){showToast(e.message||'Update failed')}}
 async function resendCollaboratorInvite(id){
   const c=collaborators.find(x=>x.id===id);
   if(!c)return;
@@ -1481,11 +1515,27 @@ function openProfileModal(){
   openModal(`<h3>Edit Profile <span class="modal-close" onclick="closeModal()">✕</span></h3>
     <div class="modal-field"><label>Name</label><input type="text" id="pf_name" value="${esc(p.name||'')}"></div>
     <div class="modal-field"><label>Email Address</label><input type="email" value="${esc(p.email||myEmail)}" disabled style="opacity:.65"></div>
+    <button class="btn-ghost" style="width:100%;margin-top:-4px;margin-bottom:12px" onclick="openChangeEmailModal()">Change Email Address</button>
     <div class="modal-field"><label>Contact Number</label><input type="tel" id="pf_phone" value="${esc(p.phone||'')}"></div>
     <div class="modal-actions"><button class="btn" onclick="confirmSaveProfile()">Save Changes</button><button class="btn-ghost" onclick="closeModal()">Cancel</button></div>
     <div style="border-top:1px solid var(--border);margin-top:18px;padding-top:16px"><div class="mini-label">Security</div><button class="btn-ghost" style="width:100%" onclick="openChangePasswordModal()">🔑 Change Password</button></div>`)
 }
 function confirmSaveProfile(){const name=document.getElementById('pf_name').value.trim(),phone=document.getElementById('pf_phone').value.trim();openConfirm('Save profile changes?',async()=>{try{const p=await window.beAuth.updateMyProfile(name,phone);ownerProfile={name:p.name||'',email:p.email||myEmail,phone:p.phone||''};if(accessMode==='owner')collaborators=await loadCollaborators();closeModal();renderSidebarContent();showToast('Profile updated ✅')}catch(e){showToast(e.message||'Save failed')}},{label:'Yes, Save Changes',danger:false})}
+function openChangeEmailModal(){
+  openModal(`<h3>Change Email Address <span class="modal-close" onclick="closeModal()">✕</span></h3>
+    <div class="modal-field"><label>New Email Address</label><input type="email" id="new_email" placeholder="name@example.com"></div>
+    <div class="email-note">A confirmation email will be sent by Business Empire. Your email changes only after the required confirmation step is completed.</div>
+    <div class="modal-actions"><button class="btn" onclick="confirmChangeEmail()">Send Confirmation</button><button class="btn-ghost" onclick="closeModal()">Cancel</button></div>`);
+}
+async function confirmChangeEmail(){
+  const email=(document.getElementById('new_email')?.value||'').trim().toLowerCase();
+  if(!email||!email.includes('@')){showToast('Enter a valid email address');return}
+  try{
+    await window.beAuth.updateEmail(email);
+    closeModal();
+    showToast('Confirmation email sent');
+  }catch(e){showToast(e.message||'Email change failed')}
+}
 function openChangePasswordModal(){openModal(`<h3>Change Password <span class="modal-close" onclick="closeModal()">✕</span></h3><div class="modal-field"><label>New Password</label><input type="password" id="cp1" autocomplete="new-password"></div><div class="modal-field"><label>Confirm New Password</label><input type="password" id="cp2" autocomplete="new-password"></div><div class="modal-actions"><button class="btn" onclick="confirmChangePassword()">Update Password</button><button class="btn-ghost" onclick="closeModal()">Cancel</button></div>`)}
 async function confirmChangePassword(){const p1=document.getElementById('cp1').value,p2=document.getElementById('cp2').value;if(p1.length<8){showToast('Password must be at least 8 characters');return}if(p1!==p2){showToast('Passwords do not match');return}try{await window.beAuth.updatePassword(p1);closeModal();showToast('Password updated ✅')}catch(e){showToast(e.message||'Password update failed')}}
 
@@ -1563,7 +1613,7 @@ function openReminderModal(existingId){
       <input type="checkbox" id="rm_email" style="width:auto" ${r&&r.email?'checked':''}>
       <label style="margin:0; text-transform:none; font-size:13px; color:var(--text)">Also email me when due</label>
     </div>
-    <div class="email-note">📧 For security reasons, a browser cannot silently send email on its own. When the reminder is due, a "Send Email" button will appear in the popup. One click will open a ready-to-send email to ${EMAIL_TO}. Fully automatic background email can be added later.</div>
+    <div class="email-note">If enabled, Business Empire will automatically send a reminder email when this reminder becomes due while the app is running.</div>
     <div class="modal-actions">
       <button class="btn" onclick="saveReminder(${r?`'${r.id}'`:'null'})">${r?'Save Changes':'Create Reminder'}</button>
       ${r? `<button class="btn-ghost" onclick="deleteReminder('${r.id}')">Delete</button>`:''}
@@ -1789,15 +1839,31 @@ function mailtoFor(r){
 }
 async function fireReminder(r){
   const bizName = r.business ? (BUSINESSES.find(b=>b.id===r.business)?.name||'') : 'General / Personal';
+  const fireKey = todayStr()+':'+r.time;
+  r.lastFiredKey = fireKey;
+  await saveReminders();
+
   playAlarm();
   if(typeof Notification !== 'undefined' && Notification.permission==='granted'){
     try{ new Notification('⏰ '+r.title, {body:(bizName+(r.note?' · '+r.note:'')), requireInteraction:true}); }catch(e){}
   }
+
   reminderLog.unshift({id:uid(), reminderId:r.id, title:r.title, business:r.business, firedAt: nowISO()});
   await saveLog();
+
+  if(r.email && r.lastEmailKey!==fireKey && window.beAuth?.sendBusinessEmail){
+    window.beAuth.sendBusinessEmail({
+      type:'reminder_due',
+      title:r.title,
+      dueAt:(r.repeat==='once' && r.date ? r.date+' ' : '')+r.time,
+      businessName:bizName
+    }).then(async()=>{
+      r.lastEmailKey=fireKey;
+      await saveReminders();
+    }).catch(()=>{});
+  }
+
   showAlarmBanner(r);
-  r.lastFiredKey = todayStr()+':'+r.time;
-  await saveReminders();
   if(currentView==='reminders') renderReminders();
   updateReminderBadge();
 }
@@ -1815,7 +1881,7 @@ function showAlarmBanner(r){
       <button class="btn-ghost" onclick="snoozeReminder('${r.id}',60)">Snooze 60 min</button>
     </div>
     <div class="modal-actions">
-      ${r.email? `<a class="btn" href="${mailtoFor(r)}" style="text-decoration:none; display:inline-flex; align-items:center">📧 Send Email</a>` : ''}
+      ${r.email? `<span class="btn-ghost" style="cursor:default">Email notification enabled</span>` : ''}
       <button class="btn-ghost" onclick="markDoneToday('${r.id}'); closeModal();">Mark Done</button>
       <button class="btn-ghost" onclick="closeModal()">Dismiss</button>
     </div>`);

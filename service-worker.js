@@ -1,6 +1,6 @@
-const CACHE_NAME = 'business-empire-pwa-v14';
+const CACHE_NAME = 'business-empire-pwa-v15';
 const APP_SHELL = [
-  './', './index.html', './app-config.js?v=14', './auth-client.js?v=14', './storage-adapter.js?v=14', './app.js?v=14',
+  './', './index.html', './app-config.js?v=15', './auth-client.js?v=15', './storage-adapter.js?v=15', './app.js?v=15',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png',
   './business-logos/d-prime.png', './business-logos/pipsepaisa.png', './business-logos/hassan-bina.png', './business-logos/kebaabish.png', './business-logos/24k.png', './business-logos/hamara-umrah.png'
 ];
