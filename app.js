@@ -24,7 +24,7 @@ const BUSINESS_LOGOS = {
   umrah:'business-logos/hamara-umrah.png'
 };
 function businessMarkHTML(b, className='biz-logo-img'){
-  const src = BUSINESS_LOGOS[b?.id];
+  const src = b?.logoUrl || BUSINESS_LOGOS[b?.id];
   if(src) return `<img src="${src}" alt="${esc2(b.name)} logo" class="${className}">`;
   return `<span class="business-emoji">${esc2(b?.icon||'💼')}</span>`;
 }
@@ -66,6 +66,7 @@ function uiIcon(name){
     logout:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h5M14 8l4 4-4 4M8 12h10"/></svg>',
     bell:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>',
     users:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20a6 6 0 0 1 12 0M14 20a5 5 0 0 1 7 0"/></svg>',
+    activity:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/><circle cx="4" cy="7" r="1"/><circle cx="10" cy="3" r="1"/><circle cx="16" cy="10" r="1"/></svg>',
     plus:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
     menu:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>'
   };
@@ -460,7 +461,7 @@ function renderDashboard(){
     <div class="sum-card income"><div class="lbl">Total Income</div>${fmtDualBlock(incomeTriple)}</div>
     <div class="sum-card expense"><div class="lbl">Total Expenses</div>${fmtDualBlock(expenseTriple)}</div>
     <div class="sum-card net"><div class="lbl">Net Profit</div>${fmtDualBlock(netTriple)}</div>
-    <div class="sum-card clickable" onclick="openGlobalLog()"><div class="lbl">Total Entries Logged</div><div class="val">${totalTxns}</div><div class="sub-val">Activity Logs →</div></div>
+    ${accessMode==='owner' ? `<div class="sum-card clickable" onclick="openGlobalLog()"><div class="lbl">Owner Activity</div><div class="val">${totalTxns}</div><div class="sub-val">Audit & Transaction Reports →</div></div>` : `<div class="sum-card"><div class="lbl">Total Entries Logged</div><div class="val">${totalTxns}</div><div class="sub-val">Your assigned businesses</div></div>`}
   </div>
   <div class="fx-note" style="margin:-18px 0 20px 2px">Rates used: 1 USD = RM ${fxRates.USD} · 1 PKR = RM ${fxRates.PKR} — <span style="text-decoration:underline dotted; cursor:pointer" onclick="openFxSettings()">⚙️ edit rates</span></div>
   <div class="sort-bar" style="justify-content:flex-end">
@@ -1372,6 +1373,7 @@ function renderSidebarContent(){
 
     <button class="menu-item" onclick="closeSidebar(); openReminders();">${uiIcon('bell')}<span>Reminders</span></button>
     ${accessMode==='owner' ? `<button class="menu-item" onclick="closeSidebar(); openCollaborators();">${uiIcon('users')}<span>Collaborators</span>${collaborators.filter(c=>c.status==='invited').length?`<span class="menu-count">${collaborators.filter(c=>c.status==='invited').length}</span>`:''}</button>` : ''}
+    ${accessMode==='owner' ? `<button class="menu-item" onclick="closeSidebar(); openGlobalLog();">${uiIcon('activity')}<span>Activity</span></button>` : ''}
     <button class="menu-item" onclick="closeSidebar(); openProfileModal();">${uiIcon('user')}<span>Profile</span></button>
 
     <button class="menu-item" onclick="toggleTheme()">
@@ -1926,7 +1928,7 @@ document.addEventListener('visibilitychange', ()=>{
 });
 
 /* ===================== INIT ===================== */
-window.__BUSINESS_EMPIRE_APP_VERSION='13.0.0';
+window.__BUSINESS_EMPIRE_APP_VERSION='16.0.0';
 (async function init(){
   try{
     await applySavedTheme();
@@ -1940,5 +1942,188 @@ window.__BUSINESS_EMPIRE_APP_VERSION='13.0.0';
     setInterval(checkReminders,15000);setInterval(updateReminderBadge,30000);
   }catch(err){console.error('[Business Empire] Startup failed:',err);document.getElementById('app').innerHTML='<div class="gate-wrap"><div class="gate-card"><h2>App could not start</h2><p>'+esc2(err.message||'Please refresh and try again.')+'</p><button class="btn" onclick="location.reload()">Refresh App</button></div></div>'}
 })();
-if('serviceWorker'in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('./service-worker.js?v=14').then(reg=>reg.update()).catch(err=>console.warn('[Business Empire] service worker failed:',err))})}
+if('serviceWorker'in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('./service-worker.js?v=16').then(reg=>reg.update()).catch(err=>console.warn('[Business Empire] service worker failed:',err))})}
 
+
+
+/* ===================== V16: OWNER ACTIVITY + LOGOS + FINANCIAL ATTACHMENTS ===================== */
+const FIN_FILE_ACCEPT = '.png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf';
+let activityMode = 'all';
+let activityRowsCache = [];
+
+function businessMarkHTML(b, className='biz-logo-img'){
+  const src = b?.logoUrl || BUSINESS_LOGOS[b?.id];
+  if(src) return `<img src="${esc2(src)}" alt="${esc2(b?.name||'Business')} logo" class="${className}">`;
+  return `<span class="business-emoji">${esc2(b?.icon||'💼')}</span>`;
+}
+function financialFileFromInput(id){ const el=document.getElementById(id); return el?.files?.[0]||null; }
+function validateFinancialFileLocal(file){
+  if(!file) return true;
+  const okType=['image/png','image/jpeg','application/pdf'].includes(file.type) || /\.(png|jpe?g|pdf)$/i.test(file.name||'');
+  if(!okType){showToast('Only PNG, JPG, JPEG or PDF files are allowed');return false}
+  if(file.size>10*1024*1024){showToast('File must be 10 MB or smaller');return false}
+  return true;
+}
+function attachmentToken(att){ try{return encodeURIComponent(JSON.stringify(att||{})).replace(/'/g,'%27')}catch(_){return ''} }
+function attachmentFromToken(token){ try{return JSON.parse(decodeURIComponent(token||''))}catch(_){return null} }
+async function viewStoredAttachment(token){const a=attachmentFromToken(token);if(!a)return;try{await window.beAuth.viewAttachment(a)}catch(e){showToast(e.message||'Unable to open file')}}
+async function downloadStoredAttachment(token){const a=attachmentFromToken(token);if(!a)return;try{await window.beAuth.downloadAttachment(a)}catch(e){showToast(e.message||'Unable to download file')}}
+function attachmentButtons(att){
+  if(!att?.path) return '<span class="file-empty">—</span>';
+  const token=attachmentToken(att);
+  return `<div class="file-actions"><button class="file-pill" onclick="viewStoredAttachment('${token}')">View</button><button class="file-pill secondary" onclick="downloadStoredAttachment('${token}')">Download</button></div>`;
+}
+async function uploadEntryAttachment(file,entityType,entityId){
+  if(!file) return null;
+  if(!validateFinancialFileLocal(file)) throw new Error('Invalid attachment');
+  return await window.beAuth.uploadAttachment({businessId:currentBiz,entityType,entityId,file});
+}
+function activityBusinessName(id){return BUSINESSES.find(b=>b.id===id)?.name||''}
+function logAppActivity(action,opts={}){
+  if(!window.beAuth?.logActivity) return Promise.resolve();
+  const bId=opts.businessId||null;
+  return window.beAuth.logActivity({
+    action,
+    business_id:bId,
+    business_name:opts.businessName||activityBusinessName(bId),
+    entity_type:opts.entityType||null,
+    entity_id:opts.entityId||null,
+    amount:opts.amount===undefined?null:Number(opts.amount),
+    currency:opts.currency||null,
+    details:opts.details||{}
+  });
+}
+function businessLogoPreview(event){
+  const file=event.target.files?.[0],box=document.getElementById('bizLogoPreview');
+  if(!file||!box)return;
+  if(!['image/png','image/jpeg'].includes(file.type)&&!/\.(png|jpe?g)$/i.test(file.name||'')){showToast('Logo must be PNG, JPG or JPEG');event.target.value='';return}
+  if(file.size>5*1024*1024){showToast('Logo must be 5 MB or smaller');event.target.value='';return}
+  const r=new FileReader();r.onload=e=>{box.innerHTML=`<img src="${e.target.result}" alt="Logo preview">`};r.readAsDataURL(file);
+}
+
+function buildTxnSectionHTML(b, data, type){
+  const cats=data.categories[type],isIncome=type==='income';
+  return `<div class="card" style="margin-bottom:18px">
+    <h3>Add ${isIncome?'Sale / Income':'Expense'}</h3>
+    <div class="form-row wide">
+      <div class="field"><label>Date</label><input type="date" id="f_date_${type}" value="${todayStr()}"></div>
+      <div class="field"><label>Category</label><select id="f_cat_${type}">${cats.map(c=>`<option value="${c}">${c}</option>`).join('')}</select></div>
+      <div class="field"><label>Description</label><input type="text" id="f_desc_${type}" placeholder="e.g. ${isIncome?'Client deposit':'FB Ads campaign'}"></div>
+      <div class="field"><label>Amount</label><input type="number" id="f_amt_${type}" placeholder="0.00" step="0.01"></div>
+      <div class="field"><label>Currency</label><select id="f_cur_${type}">${CURRENCIES.map(c=>`<option value="${c}">${c}</option>`).join('')}</select></div>
+      <button class="btn" style="background:${isIncome?'#0ECB81':'#F6465D'}" onclick="addTxn('${type}')">+ Add</button>
+    </div>
+    ${isIncome?`<div class="field" style="max-width:420px; margin-bottom:14px"><label>Source — Where did it come from? (required)</label><input type="text" id="f_source_${type}" placeholder="e.g. Client Ahmed / DP commission / Partner ABC deal"></div>`:''}
+    <div class="attachment-field"><label>Receipt / Slip / Document <span>PNG, JPG, JPEG or PDF · max 10 MB</span></label><input type="file" id="f_file_${type}" accept="${FIN_FILE_ACCEPT}"></div>
+    <button class="btn-add-cat" onclick="addCategory('${type}')">+ Add custom category</button>
+  </div>
+  <div class="card"><h3>${isIncome?'Income':'Expense'} History (${data.transactions.filter(t=>t.type===type).length})</h3>${renderTxnTable(data,type)}</div>`;
+}
+function renderTxnTable(data,type){
+  const isIncome=type==='income';
+  const rows=data.transactions.filter(t=>t.type===type).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+  if(!rows.length)return `<div class="empty-state"><div class="big">—</div>No entries yet. Add your first one above.</div>`;
+  let h=`<div class="table-scroll"><table><thead><tr><th>Date</th>${isIncome?'<th>Source</th>':''}<th>Category</th><th>Description</th><th>Amount</th><th>File</th><th>Logged</th><th></th></tr></thead><tbody>`;
+  rows.forEach(t=>{const edited=t.history&&t.history.length;h+=`<tr><td>${t.date}</td>${isIncome?`<td>${esc2(t.source||'—')}</td>`:''}<td><span class="chip" style="background:#262A33;color:#EAECEF">${esc2(t.category)}</span></td><td>${esc2(t.description||'—')}</td><td class="${isIncome?'amt-pos':'amt-neg'}">${isIncome?'+':'-'} ${esc2(t.currency)} ${fmt(t.amount)}</td><td>${attachmentButtons(t.attachment)}</td><td><div class="meta-line">${fmtDateTime(t.createdAt)}</div>${edited?`<span class="edited-tag" onclick="viewHistory('txn','${t.id}')">edited ×${t.history.length}</span>`:''}</td><td><div class="row-actions"><button class="btn-ghost" onclick="editTxn('${t.id}')">Edit</button><button class="btn-ghost" onclick="deleteTxn('${t.id}')">Delete</button></div></td></tr>`});
+  return h+'</tbody></table></div>';
+}
+async function addTxn(type){
+  const date=document.getElementById('f_date_'+type).value||todayStr(),category=document.getElementById('f_cat_'+type).value,description=document.getElementById('f_desc_'+type).value.trim(),amount=parseFloat(document.getElementById('f_amt_'+type).value),currency=document.getElementById('f_cur_'+type).value,isIncome=type==='income',source=isIncome?document.getElementById('f_source_'+type).value.trim():'',file=financialFileFromInput('f_file_'+type);
+  if(!amount||amount<=0){showToast('Enter a valid amount');return} if(isIncome&&!source){showToast('Please enter the income source.');return} if(file&&!validateFinancialFileLocal(file))return;
+  const id=uid();let attachment=null;
+  try{if(file)attachment=await uploadEntryAttachment(file,'transaction',id)}catch(e){showToast(e.message||'File upload failed');return}
+  const item={id,type,date,category,description,amount,currency,source,attachment,createdAt:nowISO(),history:[]};
+  bizData[currentBiz].transactions.push(item);await saveBiz(currentBiz);
+  logAppActivity(type+'_added',{businessId:currentBiz,entityType:'transaction',entityId:id,amount,currency,details:{category,description,source,attachment}}).catch(()=>{});
+  showToast((isIncome?'Income':'Expense')+' added');renderBizDetail();
+}
+async function deleteTxn(id){
+  const t=bizData[currentBiz].transactions.find(x=>x.id===id);if(!t)return;
+  openConfirm('Delete this entry? This cannot be undone.',async()=>{bizData[currentBiz].transactions=bizData[currentBiz].transactions.filter(x=>x.id!==id);await saveBiz(currentBiz);logAppActivity(t.type+'_deleted',{businessId:currentBiz,entityType:'transaction',entityId:id,amount:t.amount,currency:t.currency,details:{category:t.category,description:t.description,source:t.source,fileName:t.attachment?.name||''}}).catch(()=>{});if(t.attachment)window.beAuth.deleteAttachment(t.attachment).catch(()=>{});renderBizDetail();showToast('Entry deleted')});
+}
+function editTxn(id){
+  const t=bizData[currentBiz].transactions.find(x=>x.id===id);if(!t)return;const cats=bizData[currentBiz].categories[t.type],isIncome=t.type==='income';
+  openModal(`<h3>Edit ${isIncome?'Income':'Expense'} <span class="modal-close" onclick="closeModal()">✕</span></h3>
+    <div class="modal-field"><label>Date</label><input type="date" id="e_date" value="${t.date}"></div>
+    <div class="modal-field"><label>Category</label><select id="e_cat">${cats.map(c=>`<option value="${c}" ${c===t.category?'selected':''}>${c}</option>`).join('')}</select></div>
+    ${isIncome?`<div class="modal-field"><label>Source — Where did it come from?</label><input type="text" id="e_source" value="${esc(t.source||'')}"></div>`:''}
+    <div class="modal-field"><label>Description</label><input type="text" id="e_desc" value="${esc(t.description||'')}"></div>
+    <div class="modal-field"><label>Amount</label><input type="number" id="e_amt" value="${t.amount}" step="0.01"></div>
+    <div class="modal-field"><label>Currency</label><select id="e_cur">${CURRENCIES.map(c=>`<option value="${c}" ${c===t.currency?'selected':''}>${c}</option>`).join('')}</select></div>
+    <div class="attachment-field"><label>${t.attachment?'Replace attachment':'Add attachment'} <span>PNG, JPG, JPEG or PDF · max 10 MB</span></label><input type="file" id="e_file" accept="${FIN_FILE_ACCEPT}">${t.attachment?`<div class="existing-file">Current: ${esc2(t.attachment.name||'Attachment')} ${attachmentButtons(t.attachment)} <label class="remove-file-check"><input type="checkbox" id="e_remove_file"> Remove current file</label></div>`:''}</div>
+    <div class="meta-line" style="margin-bottom:10px">Originally logged: ${fmtDateTime(t.createdAt)}</div><div class="modal-actions"><button class="btn" onclick="saveEditTxn('${id}')">Save Changes</button><button class="btn-ghost" onclick="closeModal()">Cancel</button></div>`);
+}
+function saveEditTxn(id){
+  const t=bizData[currentBiz].transactions.find(x=>x.id===id);if(!t)return;const isIncome=t.type==='income';
+  const newVals={date:document.getElementById('e_date').value||t.date,category:document.getElementById('e_cat').value,description:document.getElementById('e_desc').value.trim(),amount:parseFloat(document.getElementById('e_amt').value),currency:document.getElementById('e_cur').value,source:isIncome?document.getElementById('e_source').value.trim():t.source};
+  const file=financialFileFromInput('e_file'),remove=!!document.getElementById('e_remove_file')?.checked;
+  if(!newVals.amount||newVals.amount<=0){showToast('Enter a valid amount');return}if(isIncome&&!newVals.source){showToast('Source is required for income');return}if(file&&!validateFinancialFileLocal(file))return;
+  const changes={};Object.keys(newVals).forEach(k=>{if(String(t[k])!==String(newVals[k]))changes[k]={from:t[k],to:newVals[k]}});if(file)changes.attachment={from:t.attachment?.name||'—',to:file.name};else if(remove&&t.attachment)changes.attachment={from:t.attachment.name||'Attachment',to:'Removed'};
+  if(!Object.keys(changes).length){showToast('No changes made');closeModal();return}
+  openConfirm('Save these changes?',async()=>{let nextAttachment=t.attachment||null,oldAttachment=t.attachment||null;try{if(file)nextAttachment=await uploadEntryAttachment(file,'transaction',id);else if(remove)nextAttachment=null}catch(e){showToast(e.message||'File upload failed');return}t.history=t.history||[];t.history.push({editedAt:nowISO(),changes});Object.assign(t,newVals,{attachment:nextAttachment});await saveBiz(currentBiz);if(oldAttachment&&oldAttachment!==nextAttachment&&(file||remove))window.beAuth.deleteAttachment(oldAttachment).catch(()=>{});logAppActivity(t.type+'_updated',{businessId:currentBiz,entityType:'transaction',entityId:id,amount:t.amount,currency:t.currency,details:{changes,attachment:nextAttachment}}).catch(()=>{});showToast('Changes saved & logged');closeModal();renderBizDetail()},{label:'Yes, Save Changes',danger:false});
+}
+
+function buildBalanceSheetHTML(b,data){
+  const inc=totalsByCurrency(data.transactions,'income'),exp=totalsByCurrency(data.transactions,'expense'),incT=currencyTriple(totalRMFor(data.transactions,'income')),expT=currencyTriple(totalRMFor(data.transactions,'expense')),netT=currencyTriple(totalRMFor(data.transactions,'net')),currency=data.assets[0]?.currency||Object.keys(inc)[0]||Object.keys(exp)[0]||'RM',assetsTotal=data.assets.reduce((s,a)=>s+Number(a.amount),0),liabTotal=data.liabilities.reduce((s,l)=>s+Number(l.amount),0),equity=assetsTotal-liabTotal;
+  const itemHtml=(x,kind)=>`<div class="bs-item" style="display:block"><div style="display:flex;justify-content:space-between"><span>${esc2(x.description)}</span><span>${currency} ${fmt(x.amount)}</span></div><div class="bs-attachment-row">${attachmentButtons(x.attachment)}</div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px"><div class="meta-line">${fmtDateTime(x.createdAt)} ${x.history&&x.history.length?`<span class="edited-tag" onclick="viewHistory('${kind}','${x.id}')">edited ×${x.history.length}</span>`:''}</div><div class="row-actions"><button class="btn-ghost" onclick="${kind==='asset'?'editAsset':'editLiability'}('${x.id}')">Edit</button><button class="btn-ghost" onclick="${kind==='asset'?'deleteAsset':'deleteLiability'}('${x.id}')">Delete</button></div></div></div>`;
+  return `<div class="grid2"><div class="card"><h3>Profit &amp; Loss Summary</h3><div class="bs-item" style="align-items:flex-start"><span>Total Income</span><span class="amt-pos" style="text-align:right">RM ${fmt(incT.RM)}<br><span style="font-size:11px;opacity:.8">$ ${fmt(incT.USD)} · ₨ ${fmt(incT.PKR)}</span></span></div><div class="bs-item" style="align-items:flex-start"><span>Total Expenses</span><span class="amt-neg" style="text-align:right">RM ${fmt(expT.RM)}<br><span style="font-size:11px;opacity:.8">$ ${fmt(expT.USD)} · ₨ ${fmt(expT.PKR)}</span></span></div><div class="bs-total" style="align-items:flex-start"><span>Net Profit</span><span style="text-align:right">RM ${fmt(netT.RM)}<br><span style="font-size:11px;opacity:.8;font-weight:600">$ ${fmt(netT.USD)} · ₨ ${fmt(netT.PKR)}</span></span></div></div>
+  <div class="card"><h3>Add Asset / Liability (${currency})</h3><div class="form-row" style="grid-template-columns:1fr 1fr auto"><div class="field"><label>Description</label><input type="text" id="bs_desc" placeholder="e.g. Office laptop / Bank loan"></div><div class="field"><label>Amount</label><input type="number" id="bs_amt" placeholder="0.00" step="0.01"></div><button class="btn" onclick="addAsset()">+ Asset</button></div><div class="attachment-field compact"><label>Invoice / Agreement / Slip <span>PNG, JPG, JPEG or PDF · max 10 MB</span></label><input type="file" id="bs_file" accept="${FIN_FILE_ACCEPT}"></div><div class="form-row" style="grid-template-columns:1fr 1fr auto;margin-top:2px"><div></div><div></div><button class="btn" style="background:#F6465D" onclick="addLiability()">+ Liability</button></div></div></div>
+  <div class="card" style="margin-top:18px"><div class="bs-grid"><div class="bs-col"><h4>Assets</h4>${data.assets.length?data.assets.map(a=>itemHtml(a,'asset')).join(''):'<div class="bs-item" style="color:var(--sub)">No assets added yet</div>'}<div class="bs-total"><span>Total Assets</span><span>${currency} ${fmt(assetsTotal)}</span></div></div><div class="bs-col"><h4>Liabilities</h4>${data.liabilities.length?data.liabilities.map(l=>itemHtml(l,'liability')).join(''):'<div class="bs-item" style="color:var(--sub)">No liabilities added yet</div>'}<div class="bs-total"><span>Total Liabilities</span><span>${currency} ${fmt(liabTotal)}</span></div></div></div><div class="bs-total" style="margin-top:20px;font-size:16px;color:var(--gold)"><span>Net Worth (Equity)</span><span>${currency} ${fmt(equity)}</span></div></div>`;
+}
+async function addAsset(){await addBalanceItemV16('asset')}
+async function addLiability(){await addBalanceItemV16('liability')}
+async function addBalanceItemV16(kind){
+  const description=document.getElementById('bs_desc').value.trim(),amount=parseFloat(document.getElementById('bs_amt').value),file=financialFileFromInput('bs_file');if(!description||!amount){showToast('Enter description & amount');return}if(file&&!validateFinancialFileLocal(file))return;const currency=bizData[currentBiz].assets[0]?.currency||'RM',id=uid();let attachment=null;try{if(file)attachment=await uploadEntryAttachment(file,kind,id)}catch(e){showToast(e.message||'File upload failed');return}const item={id,description,amount,currency,attachment,createdAt:nowISO(),history:[]};bizData[currentBiz][kind==='asset'?'assets':'liabilities'].push(item);await saveBiz(currentBiz);logAppActivity(kind+'_added',{businessId:currentBiz,entityType:kind,entityId:id,amount,currency,details:{description,attachment}}).catch(()=>{});renderBizDetail();showToast((kind==='asset'?'Asset':'Liability')+' added');
+}
+async function deleteAsset(id){deleteBalanceItemV16('asset',id)}
+async function deleteLiability(id){deleteBalanceItemV16('liability',id)}
+function deleteBalanceItemV16(kind,id){const list=bizData[currentBiz][kind==='asset'?'assets':'liabilities'],item=list.find(x=>x.id===id);if(!item)return;openConfirm(`Delete this ${kind}?`,async()=>{bizData[currentBiz][kind==='asset'?'assets':'liabilities']=list.filter(x=>x.id!==id);await saveBiz(currentBiz);logAppActivity(kind+'_deleted',{businessId:currentBiz,entityType:kind,entityId:id,amount:item.amount,currency:item.currency,details:{description:item.description,fileName:item.attachment?.name||''}}).catch(()=>{});if(item.attachment)window.beAuth.deleteAttachment(item.attachment).catch(()=>{});renderBizDetail();showToast((kind==='asset'?'Asset':'Liability')+' deleted')})}
+function editBSItem(kind,id){const list=kind==='asset'?bizData[currentBiz].assets:bizData[currentBiz].liabilities,item=list.find(x=>x.id===id);if(!item)return;openModal(`<h3>Edit ${kind==='asset'?'Asset':'Liability'} <span class="modal-close" onclick="closeModal()">✕</span></h3><div class="modal-field"><label>Description</label><input type="text" id="e_bsdesc" value="${esc(item.description||'')}"></div><div class="modal-field"><label>Amount</label><input type="number" id="e_bsamt" value="${item.amount}" step="0.01"></div><div class="attachment-field"><label>${item.attachment?'Replace attachment':'Add attachment'} <span>PNG, JPG, JPEG or PDF · max 10 MB</span></label><input type="file" id="e_bsfile" accept="${FIN_FILE_ACCEPT}">${item.attachment?`<div class="existing-file">Current: ${esc2(item.attachment.name||'Attachment')} ${attachmentButtons(item.attachment)} <label class="remove-file-check"><input type="checkbox" id="e_bs_remove_file"> Remove current file</label></div>`:''}</div><div class="meta-line" style="margin-bottom:10px">Originally logged: ${fmtDateTime(item.createdAt)}</div><div class="modal-actions"><button class="btn" onclick="saveEditBSItem('${kind}','${id}')">Save Changes</button><button class="btn-ghost" onclick="closeModal()">Cancel</button></div>`)}
+function saveEditBSItem(kind,id){const list=kind==='asset'?bizData[currentBiz].assets:bizData[currentBiz].liabilities,item=list.find(x=>x.id===id);if(!item)return;const newVals={description:document.getElementById('e_bsdesc').value.trim(),amount:parseFloat(document.getElementById('e_bsamt').value)},file=financialFileFromInput('e_bsfile'),remove=!!document.getElementById('e_bs_remove_file')?.checked;if(!newVals.description||!newVals.amount){showToast('Enter description & amount');return}if(file&&!validateFinancialFileLocal(file))return;const changes={};Object.keys(newVals).forEach(k=>{if(String(item[k])!==String(newVals[k]))changes[k]={from:item[k],to:newVals[k]}});if(file)changes.attachment={from:item.attachment?.name||'—',to:file.name};else if(remove&&item.attachment)changes.attachment={from:item.attachment.name||'Attachment',to:'Removed'};if(!Object.keys(changes).length){showToast('No changes made');closeModal();return}openConfirm('Save these changes?',async()=>{const old=item.attachment||null;let next=old;try{if(file)next=await uploadEntryAttachment(file,kind,id);else if(remove)next=null}catch(e){showToast(e.message||'File upload failed');return}item.history=item.history||[];item.history.push({editedAt:nowISO(),changes});Object.assign(item,newVals,{attachment:next});await saveBiz(currentBiz);if(old&&old!==next&&(file||remove))window.beAuth.deleteAttachment(old).catch(()=>{});logAppActivity(kind+'_updated',{businessId:currentBiz,entityType:kind,entityId:id,amount:item.amount,currency:item.currency,details:{changes,attachment:next}}).catch(()=>{});showToast('Changes saved & logged');closeModal();renderBizDetail()},{label:'Yes, Save Changes',danger:false})}
+
+function bizFormFields(b){
+  const name=b?esc(b.name):'',tag=b?esc(b.tag):'',icon=b?b.icon:'💼',color=b?b.color:BIZ_COLOR_PALETTE[BUSINESSES.length%BIZ_COLOR_PALETTE.length],current=b?(b.logoUrl||BUSINESS_LOGOS[b.id]||''):'';
+  return `<div class="modal-field"><label>Business Name</label><input type="text" id="biz_name" placeholder="e.g. Gold Trading Desk" value="${name}"></div><div class="modal-field"><label>Short Description / Tag</label><input type="text" id="biz_tag" placeholder="e.g. Precious metals trading" value="${tag}"></div><div class="modal-field"><label>Logo</label><div class="biz-logo-upload-row"><div class="biz-logo-preview" id="bizLogoPreview">${current?`<img src="${esc2(current)}" alt="Current logo">`:'<span>No logo</span>'}</div><div style="flex:1"><input type="file" id="biz_logo_file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" onchange="businessLogoPreview(event)"><div class="file-help">PNG, JPG or JPEG · max 5 MB · square logo recommended</div></div></div></div><div class="modal-field"><label>Fallback Icon</label><input type="text" id="biz_icon" maxlength="4" value="${icon}" style="width:70px;text-align:center;font-size:18px"><div class="color-swatches">${BIZ_ICON_SUGGESTIONS.map(ic=>`<span style="cursor:pointer;font-size:18px" onclick="document.getElementById('biz_icon').value='${ic}'">${ic}</span>`).join('')}</div></div><div class="modal-field"><label>Color</label><div class="color-swatches" id="biz_color_swatches">${BIZ_COLOR_PALETTE.map(c=>`<span class="color-swatch ${c===color?'sel':''}" style="background:${c}" onclick="selectBizColor('${c}',this)"></span>`).join('')}</div><input type="hidden" id="biz_color" value="${color}"></div>`;
+}
+async function saveNewBusiness(){
+  const name=document.getElementById('biz_name').value.trim(),tag=document.getElementById('biz_tag').value.trim(),icon=document.getElementById('biz_icon').value.trim()||'💼',color=document.getElementById('biz_color').value,file=document.getElementById('biz_logo_file')?.files?.[0]||null;if(!name){showToast('Enter a business name');return}let id=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'')||'biz';if(BUSINESSES.some(b=>b.id===id))id=id+'-'+uid().slice(0,4);let logo={};try{if(file)logo=await window.beAuth.uploadBusinessLogo(id,file)}catch(e){showToast(e.message||'Logo upload failed');return}const newBiz={id,name,tag,icon,color,logoUrl:logo.url||'',logoPath:logo.path||''};BUSINESSES.push(newBiz);bizData[id]={transactions:[],categories:{expense:[...EXPENSE_CATS_DEFAULT],income:[...INCOME_CATS_DEFAULT]},assets:[],liabilities:[]};bizOrderState.order.push(id);await saveBusinessesList();await saveOrder();logAppActivity('business_added',{businessId:id,businessName:name,entityType:'business',entityId:id,details:{tag,logo:!!logo.url}}).catch(()=>{});closeModal();renderSidebarContent();updateBizCountBadge();if(currentView==='dashboard')renderDashboard();showToast('Business added ✅');
+}
+function saveEditBusiness(id){const b=BUSINESSES.find(x=>x.id===id);if(!b)return;const name=document.getElementById('biz_name').value.trim(),tag=document.getElementById('biz_tag').value.trim(),icon=document.getElementById('biz_icon').value.trim()||'💼',color=document.getElementById('biz_color').value,file=document.getElementById('biz_logo_file')?.files?.[0]||null;if(!name){showToast('Enter a business name');return}openConfirm(`Update the details for "${esc2(name)}"?`,async()=>{const oldLogo=b.logoPath||'',changes={name:{from:b.name,to:name},tag:{from:b.tag,to:tag}};let logoUrl=b.logoUrl||'',logoPath=b.logoPath||'';try{if(file){const up=await window.beAuth.uploadBusinessLogo(id,file);logoUrl=up.url;logoPath=up.path}}catch(e){showToast(e.message||'Logo upload failed');return}b.name=name;b.tag=tag;b.icon=icon;b.color=color;b.logoUrl=logoUrl;b.logoPath=logoPath;await saveBusinessesList();if(file&&oldLogo&&oldLogo!==logoPath)window.beAuth.deleteBusinessLogo(oldLogo).catch(()=>{});logAppActivity('business_updated',{businessId:id,businessName:name,entityType:'business',entityId:id,details:{changes,logoReplaced:!!file}}).catch(()=>{});closeModal();renderSidebarContent();updateBizCountBadge();if(currentView==='dashboard')renderDashboard();if(currentView==='business'&&currentBiz===id)renderBizDetail();showToast('Business updated ✅')},{label:'Yes, Save Changes',danger:false})}
+function confirmDeleteBusiness(id){const b=BUSINESSES.find(x=>x.id===id);if(!b)return;openConfirm(`Delete "${esc2(b.name)}"? All of its income, expense, balance sheet data and access permissions will be removed.`,async()=>{const oldData=bizData[id]||{};BUSINESSES=BUSINESSES.filter(x=>x.id!==id);delete bizData[id];bizOrderState.order=bizOrderState.order.filter(x=>x!==id);await saveBusinessesList();await saveOrder();try{await window.beAuth.deleteBusinessAccess(id)}catch(e){console.warn(e)}try{await window.storage.delete('biz:'+id,true)}catch(e){}if(b.logoPath)window.beAuth.deleteBusinessLogo(b.logoPath).catch(()=>{});logAppActivity('business_deleted',{businessId:id,businessName:b.name,entityType:'business',entityId:id,details:{transactions:(oldData.transactions||[]).length,assets:(oldData.assets||[]).length,liabilities:(oldData.liabilities||[]).length}}).catch(()=>{});closeModal();renderSidebarContent();updateBizCountBadge();currentBiz=null;renderDashboard();showToast('Business deleted')})}
+
+async function saveNewCollaborator(){const email=document.getElementById('newCollabEmail').value.trim().toLowerCase(),name=document.getElementById('newCollabName').value.trim(),chosen=Array.from(document.querySelectorAll('.newCollabChk:checked')).map(el=>el.value);if(!email||!email.includes('@')){showToast('Enter a valid email address');return}if(!name){showToast('Enter a name');return}if(!chosen.length){showToast('Select at least one business');return}closeModal();showToast('Sending invitation…');try{const r=await window.beAuth.manageCollaborator({action:'invite',email,name,businessIds:chosen});logAppActivity('collaborator_invited',{entityType:'collaborator',entityId:r?.userId||'',details:{name,email,businessIds:chosen,businessNames:chosen.map(activityBusinessName)}}).catch(()=>{});showToast('Invitation email sent ✅');refreshCollaborators().catch(()=>{})}catch(e){showToast((e.message||'Invite failed')+' — please try again')}}
+async function saveCollaboratorAccess(id){const c=collaborators.find(x=>x.id===id);if(!c)return;const chosen=Array.from(document.querySelectorAll('.editBizChk:checked')).map(el=>el.value),name=document.getElementById('editCollabName').value.trim();if(!chosen.length){showToast('Select at least one business');return}const businessNames=chosen.map(activityBusinessName);try{await window.beAuth.manageCollaborator({action:'update_access',userId:id,name,businessIds:chosen,businessNames});logAppActivity('collaborator_access_updated',{entityType:'collaborator',entityId:id,details:{name:name||c.name,email:c.email,businessIds:chosen,businessNames}}).catch(()=>{});closeModal();await refreshCollaborators();showToast('Access updated ✅')}catch(e){showToast(e.message||'Update failed')}}
+async function disableCollaborator(id){const c=collaborators.find(x=>x.id===id);openConfirm("Disable this collaborator's login?",async()=>{try{await window.beAuth.manageCollaborator({action:'disable',userId:id});logAppActivity('collaborator_disabled',{entityType:'collaborator',entityId:id,details:{name:c?.name||'',email:c?.email||''}}).catch(()=>{});await refreshCollaborators();showToast('Collaborator disabled')}catch(e){showToast(e.message||'Disable failed')}},{label:'Yes, Disable'})}
+async function removeCollaborator(id){const c=collaborators.find(x=>x.id===id);openConfirm('Permanently remove this collaborator?',async()=>{try{await window.beAuth.manageCollaborator({action:'remove',userId:id});logAppActivity('collaborator_removed',{entityType:'collaborator',entityId:id,details:{name:c?.name||'',email:c?.email||''}}).catch(()=>{});await refreshCollaborators();showToast('Collaborator removed')}catch(e){showToast(e.message||'Remove failed')}},{label:'Yes, Remove'})}
+
+function activityActionLabel(action){return String(action||'').replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase())}
+function activityDetailText(r){const d=r.details||{};if(d.description)return d.description;if(d.source)return d.source;if(d.category)return d.category;if(d.name||d.email)return [d.name,d.email].filter(Boolean).join(' · ');if(d.businessNames)return Array.isArray(d.businessNames)?d.businessNames.join(', '):String(d.businessNames);if(d.changes)return 'Entry details updated';return '—'}
+function setActivityMode(mode){activityMode=mode;renderGlobalLog()}
+async function openGlobalLog(){if(accessMode!=='owner'){showToast('Owner access required');return}currentView='globallog';currentBiz=null;setMobileNavActive('more');await renderGlobalLog()}
+async function renderGlobalLog(){
+  if(accessMode!=='owner'){renderDashboard();return}currentView='globallog';document.getElementById('pageHeading').style.display='block';document.getElementById('pageTitle').textContent='Owner Activity';document.getElementById('pageSub').textContent='Audit users, businesses and financial transactions';document.getElementById('backBtn').style.display='flex';
+  const oldBiz=document.getElementById('actBizFilter')?.value||'all',oldUser=document.getElementById('actUserFilter')?.value||'all',oldAction=document.getElementById('actActionFilter')?.value||'all',oldFrom=document.getElementById('actFrom')?.value||'',oldTo=document.getElementById('actTo')?.value||'';
+  document.getElementById('app').innerHTML='<div class="card"><div class="loading">Loading activity…</div></div>';
+  try{activityRowsCache=await window.beAuth.listActivities(1500)}catch(e){document.getElementById('app').innerHTML=`<div class="card"><div class="empty-state">${esc2(e.message||'Unable to load activity')}</div></div>`;return}
+  const bizOpts=[...new Map(activityRowsCache.filter(r=>r.business_id).map(r=>[r.business_id,r.business_name||r.business_id])).entries()],userOpts=[...new Map(activityRowsCache.filter(r=>r.actor_user_id).map(r=>[r.actor_user_id,r.actor_name||r.actor_email||r.actor_user_id])).entries()],actionOpts=[...new Set(activityRowsCache.map(r=>r.action).filter(Boolean))].sort();
+  let rows=activityRowsCache.slice();if(activityMode==='transactions')rows=rows.filter(r=>r.entity_type==='transaction'||['income','expense'].some(x=>String(r.action).startsWith(x+'_')));if(activityMode==='business'&&oldBiz!=='all')rows=rows.filter(r=>r.business_id===oldBiz);if(activityMode==='user'&&oldUser!=='all')rows=rows.filter(r=>r.actor_user_id===oldUser);if(oldAction!=='all')rows=rows.filter(r=>r.action===oldAction);if(oldFrom)rows=rows.filter(r=>(r.created_at||'')>=oldFrom+'T00:00:00');if(oldTo)rows=rows.filter(r=>(r.created_at||'')<=oldTo+'T23:59:59');
+  const uniqueUsers=new Set(rows.map(r=>r.actor_user_id).filter(Boolean)).size,uniqueBiz=new Set(rows.map(r=>r.business_id).filter(Boolean)).size,financial=rows.filter(r=>r.amount!==null&&r.amount!==undefined).length;
+  let html=`<div class="activity-tabs"><button class="${activityMode==='all'?'active':''}" onclick="setActivityMode('all')">All Activity</button><button class="${activityMode==='transactions'?'active':''}" onclick="setActivityMode('transactions')">Transactions Report</button><button class="${activityMode==='business'?'active':''}" onclick="setActivityMode('business')">By Business</button><button class="${activityMode==='user'?'active':''}" onclick="setActivityMode('user')">By User</button></div><div class="activity-stats"><div class="rem-stat"><div class="l">Records</div><div class="v">${rows.length}</div></div><div class="rem-stat"><div class="l">Users</div><div class="v">${uniqueUsers}</div></div><div class="rem-stat"><div class="l">Businesses</div><div class="v">${uniqueBiz}</div></div><div class="rem-stat"><div class="l">Financial Actions</div><div class="v">${financial}</div></div></div><div class="card"><div class="activity-filters">${activityMode==='business'?`<select id="actBizFilter" onchange="renderGlobalLog()"><option value="all">All Businesses</option>${bizOpts.map(([id,n])=>`<option value="${esc2(id)}" ${oldBiz===id?'selected':''}>${esc2(n)}</option>`).join('')}</select>`:''}${activityMode==='user'?`<select id="actUserFilter" onchange="renderGlobalLog()"><option value="all">All Users</option>${userOpts.map(([id,n])=>`<option value="${esc2(id)}" ${oldUser===id?'selected':''}>${esc2(n)}</option>`).join('')}</select>`:''}<select id="actActionFilter" onchange="renderGlobalLog()"><option value="all">All Actions</option>${actionOpts.map(a=>`<option value="${esc2(a)}" ${oldAction===a?'selected':''}>${esc2(activityActionLabel(a))}</option>`).join('')}</select><input type="date" id="actFrom" value="${oldFrom}" onchange="renderGlobalLog()" title="From date"><input type="date" id="actTo" value="${oldTo}" onchange="renderGlobalLog()" title="To date"></div>`;
+  if(!rows.length)html+='<div class="empty-state">No activity matches these filters.</div>';else{html+='<div class="table-scroll"><table><thead><tr><th>Date / Time</th><th>User</th><th>Business</th><th>Action</th><th>Details</th><th>Amount</th><th>File</th></tr></thead><tbody>';rows.forEach(r=>{const att=r.details?.attachment;html+=`<tr><td><div class="meta-line" style="color:var(--text)">${fmtDateTime(r.created_at)}</div></td><td><b>${esc2(r.actor_name||'User')}</b><div class="meta-line">${esc2(r.actor_email||'')}</div></td><td>${r.business_name?`<span class="chip">${esc2(r.business_name)}</span>`:'—'}</td><td><span class="activity-action">${esc2(activityActionLabel(r.action))}</span></td><td>${esc2(activityDetailText(r))}</td><td>${r.amount!==null&&r.amount!==undefined?`<b>${esc2(r.currency||'')} ${fmt(r.amount)}</b>`:'—'}</td><td>${attachmentButtons(att)}</td></tr>`});html+='</tbody></table></div>'}html+='</div>';document.getElementById('app').innerHTML=html;updateReminderBadge();
+}
+
+/* V16 audit coverage for reminder actions */
+function saveReminder(id){
+  const title=document.getElementById('rm_title').value.trim(),note=document.getElementById('rm_note').value.trim(),business=document.getElementById('rm_biz').value,repeat=document.getElementById('rm_repeat').value,time=document.getElementById('rm_time').value||'09:00',email=document.getElementById('rm_email').checked,date=repeat==='once'?(document.getElementById('rm_date').value||todayStr()):'',days=repeat==='weekly'?Array.from(document.querySelectorAll('#rm_days .day-pill.sel')).map(el=>Number(el.dataset.day)):[];
+  if(!title){showToast('Enter a title');return} if(repeat==='weekly'&&!days.length){showToast('Select at least one day');return}
+  if(id){
+    const r=reminders.find(x=>x.id===id);if(!r)return;const newVals={title,note,business,repeat,time,email,date,days},changes={};Object.keys(newVals).forEach(k=>{if(JSON.stringify(r[k])!==JSON.stringify(newVals[k]))changes[k]={from:r[k],to:newVals[k]}});if(!Object.keys(changes).length){showToast('No changes made');closeModal();return}
+    openConfirm('Save these reminder changes?',async()=>{r.history=r.history||[];r.history.push({editedAt:nowISO(),changes});Object.assign(r,newVals);await saveReminders();logAppActivity('reminder_updated',{businessId:business||null,entityType:'reminder',entityId:id,details:{title,repeat,time,email,changes}}).catch(()=>{});showToast('Reminder updated & logged');closeModal();renderReminders()},{label:'Yes, Save Changes',danger:false});
+  }else{
+    (async()=>{const rid=uid();reminders.push({id:rid,title,note,business,repeat,time,email,date,days,active:true,createdAt:nowISO(),history:[],lastFiredKey:'',dismissedKey:''});await saveReminders();logAppActivity('reminder_created',{businessId:business||null,entityType:'reminder',entityId:rid,details:{title,repeat,time,email}}).catch(()=>{});showToast('Reminder created');closeModal();renderReminders()})();
+  }
+}
+async function deleteReminder(id){const r=reminders.find(x=>x.id===id);openConfirm('Delete this reminder?',async()=>{reminders=reminders.filter(x=>x.id!==id);await saveReminders();if(r)logAppActivity('reminder_deleted',{businessId:r.business||null,entityType:'reminder',entityId:id,details:{title:r.title,repeat:r.repeat,time:r.time}}).catch(()=>{});closeModal();renderReminders();showToast('Reminder deleted')})}
+async function markDoneToday(id){const r=reminders.find(x=>x.id===id);if(!r)return;r.dismissedKey=todayStr();await saveReminders();logAppActivity('reminder_completed',{businessId:r.business||null,entityType:'reminder',entityId:id,details:{title:r.title}}).catch(()=>{});renderReminders()}
+async function toggleActive(id){const r=reminders.find(x=>x.id===id);if(!r)return;r.active=!r.active;await saveReminders();logAppActivity(r.active?'reminder_resumed':'reminder_paused',{businessId:r.business||null,entityType:'reminder',entityId:id,details:{title:r.title}}).catch(()=>{});renderReminders();showToast(r.active?'Reminder resumed':'Reminder paused')}
+async function snoozeReminder(id,minutes){const r=reminders.find(x=>x.id===id);if(!r)return;const until=new Date(Date.now()+minutes*60000).toISOString();r.snoozeUntil=until;r.snoozeFiredFor=null;await saveReminders();logAppActivity('reminder_snoozed',{businessId:r.business||null,entityType:'reminder',entityId:id,details:{title:r.title,minutes}}).catch(()=>{});closeModal();showToast('Snoozed for '+minutes+' minutes');if(currentView==='reminders')renderReminders()}

@@ -1,4 +1,4 @@
-/* Business Empire Auth Client v15 — Supabase Auth + owner/collaborator roles + transactional email events. */
+/* Business Empire Auth Client v16 — Supabase Auth + owner/collaborator roles + transactional email events. */
 (function(){
   'use strict';
   const cfg = window.BUSINESS_EMPIRE_CONFIG || {};
@@ -138,6 +138,7 @@
     }
     await fetchAccess();
     touchLastLogin();
+    logActivity({action:'user_signed_in',entity_type:'auth',details:{device:(navigator.userAgent||'Browser').slice(0,180)}}).catch(()=>{});
     sendBusinessEmail({
       type:'security_alert',
       action:'New sign-in detected',
@@ -163,6 +164,7 @@
     user=u; if(session){session.user=u;saveSession(session)}
     await activateMyProfile(); await fetchAccess(); await touchLastLogin();
     callbackType=null;
+    logActivity({action:'password_changed',entity_type:'auth',details:{device:(navigator.userAgent||'Browser').slice(0,180)}}).catch(()=>{});
     sendBusinessEmail({
       type:'security_alert',
       action:'Your Business Empire password was changed',
@@ -182,6 +184,7 @@
     });
     user=u;
     if(session){session.user=u;saveSession(session)}
+    logActivity({action:'email_change_requested',entity_type:'auth',details:{newEmail:email}}).catch(()=>{});
     return u;
   }
   async function updateMyProfile(name,phone){
@@ -255,5 +258,119 @@
 
     return result;
   }
-  window.beAuth={initialize,signIn,signOut,sendPasswordReset,updatePassword,updateEmail,updateMyProfile,listCollaborators,manageCollaborator,sendBusinessEmail,fetchProfile,fetchAccess,activateMyProfile,ensureFresh,getAccessToken,getUserId,getUser,getProfile,getBusinessIds,isOwner,isAuthenticated,getCallbackType:()=>callbackType,getCallbackError:()=>callbackError,siteUrl,version:'15.0.0'};
+  function encodeObjectPath(path){
+    return String(path||'').split('/').map(encodeURIComponent).join('/');
+  }
+  function validateFinancialFile(file){
+    if(!file) throw new Error('Choose a file first');
+    const allowed=['image/png','image/jpeg','application/pdf'];
+    const name=String(file.name||'').toLowerCase();
+    const extOk=/\.(png|jpe?g|pdf)$/i.test(name);
+    if(!allowed.includes(file.type) && !extOk) throw new Error('Only PNG, JPG, JPEG or PDF files are allowed');
+    if(file.size>10*1024*1024) throw new Error('File must be 10 MB or smaller');
+  }
+  function validateLogoFile(file){
+    if(!file) throw new Error('Choose a logo first');
+    const name=String(file.name||'').toLowerCase();
+    if(!['image/png','image/jpeg'].includes(file.type) && !/\.(png|jpe?g)$/i.test(name)) throw new Error('Logo must be PNG, JPG or JPEG');
+    if(file.size>5*1024*1024) throw new Error('Logo must be 5 MB or smaller');
+  }
+  async function storageFetch(url,opts={}){
+    await ensureFresh();
+    const headers=Object.assign({'apikey':key,'Authorization':'Bearer '+getAccessToken()},opts.headers||{});
+    const res=await fetch(url,Object.assign({},opts,{headers}));
+    if(!res.ok){
+      let msg='Storage request failed ('+res.status+')';
+      try{const body=await res.json();msg=body.message||body.error||msg}catch(_){}
+      const e=new Error(msg);e.status=res.status;throw e;
+    }
+    return res;
+  }
+  async function uploadBusinessLogo(businessId,file){
+    if(!isOwner()) throw new Error('Owner access required');
+    validateLogoFile(file);
+    const ext=(String(file.name||'logo.png').split('.').pop()||'png').toLowerCase().replace('jpeg','jpg');
+    const path=String(businessId||'business')+'/logo-'+Date.now()+'.'+ext;
+    await storageFetch(base+'/storage/v1/object/business-assets/'+encodeObjectPath(path),{
+      method:'POST',headers:{'Content-Type':file.type||'image/png','x-upsert':'true'},body:file
+    });
+    return {path,url:base+'/storage/v1/object/public/business-assets/'+encodeObjectPath(path)};
+  }
+  async function deleteBusinessLogo(path){
+    if(!path || !isOwner()) return;
+    try{await storageFetch(base+'/storage/v1/object/business-assets/'+encodeObjectPath(path),{method:'DELETE'});}catch(e){console.warn('[Business Empire] logo cleanup:',e)}
+  }
+  async function uploadAttachment({businessId,entityType,entityId,file}){
+    validateFinancialFile(file);
+    if(!businessId || !entityType || !entityId) throw new Error('Attachment reference is incomplete');
+    const uid=getUserId(); if(!uid) throw new Error('Not signed in');
+    const safe=String(file.name||'file').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/^-+|-+$/g,'').slice(-100)||'file';
+    const path=String(businessId)+'/'+uid+'/'+Date.now()+'-'+safe;
+    await storageFetch(base+'/storage/v1/object/business-files/'+encodeObjectPath(path),{
+      method:'POST',headers:{'Content-Type':file.type||'application/octet-stream','x-upsert':'false'},body:file
+    });
+    try{
+      const rows=await request(base+'/rest/v1/business_files',{
+        method:'POST',headers:restHeaders({'Prefer':'return=representation'}),
+        body:JSON.stringify({workspace_id:String(cfg.workspaceId||'business-empire-main'),business_id:String(businessId),entity_type:String(entityType),entity_id:String(entityId),storage_path:path,file_name:String(file.name||'Attachment'),mime_type:String(file.type||''),size_bytes:Number(file.size||0),uploaded_by:uid})
+      });
+      const row=Array.isArray(rows)&&rows[0]?rows[0]:{};
+      return {id:row.id||'',path,name:String(file.name||'Attachment'),mime:String(file.type||''),size:Number(file.size||0),uploadedAt:row.created_at||new Date().toISOString()};
+    }catch(e){
+      try{await storageFetch(base+'/storage/v1/object/business-files/'+encodeObjectPath(path),{method:'DELETE'});}catch(_){}
+      throw e;
+    }
+  }
+  async function deleteAttachment(att){
+    if(!att) return;
+    const path=att.path||att.storage_path;
+    if(path){try{await storageFetch(base+'/storage/v1/object/business-files/'+encodeObjectPath(path),{method:'DELETE'});}catch(e){console.warn('[Business Empire] attachment storage cleanup:',e)}}
+    if(att.id){try{await request(base+'/rest/v1/business_files?id=eq.'+encodeURIComponent(att.id),{method:'DELETE',headers:restHeaders()});}catch(e){console.warn('[Business Empire] attachment metadata cleanup:',e)}}
+  }
+  async function attachmentBlob(att){
+    const path=typeof att==='string'?att:(att?.path||att?.storage_path||'');
+    if(!path) throw new Error('Attachment not found');
+    const res=await storageFetch(base+'/storage/v1/object/authenticated/business-files/'+encodeObjectPath(path),{method:'GET'});
+    return await res.blob();
+  }
+  async function viewAttachment(att){
+    const blob=await attachmentBlob(att);
+    const url=URL.createObjectURL(blob);
+    window.open(url,'_blank','noopener');
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
+  }
+  async function downloadAttachment(att){
+    const blob=await attachmentBlob(att);
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download=String(att?.name||att?.file_name||'attachment');document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),5000);
+  }
+  async function logActivity(payload){
+    if(!isAuthenticated()) return null;
+    const p=getProfile()||{};
+    const data=Object.assign({},payload||{}, {
+      workspace_id:String(cfg.workspaceId||'business-empire-main'),
+      actor_user_id:getUserId(),
+      actor_name:p.name||'',
+      actor_email:p.email||getUser()?.email||''
+    });
+    try{
+      await ensureFresh();
+      return await request(base+'/rest/v1/business_activity',{
+        method:'POST',headers:restHeaders({'Prefer':'return=minimal'}),body:JSON.stringify(data)
+      });
+    }catch(e){console.warn('[Business Empire] activity log:',e);return null}
+  }
+  async function listActivities(limit=1000){
+    if(!isOwner()) throw new Error('Owner access required');
+    await ensureFresh();
+    const safeLimit=Math.max(1,Math.min(2000,Number(limit)||1000));
+    return await request(base+'/rest/v1/business_activity?select=id,workspace_id,actor_user_id,actor_name,actor_email,business_id,business_name,entity_type,entity_id,action,amount,currency,details,created_at&order=created_at.desc&limit='+safeLimit,{headers:restHeaders()});
+  }
+  async function deleteBusinessAccess(businessId){
+    if(!isOwner() || !businessId) return;
+    await request(base+'/rest/v1/business_access?business_id=eq.'+encodeURIComponent(businessId),{method:'DELETE',headers:restHeaders()});
+  }
+
+  window.beAuth={initialize,signIn,signOut,sendPasswordReset,updatePassword,updateEmail,updateMyProfile,listCollaborators,manageCollaborator,sendBusinessEmail,fetchProfile,fetchAccess,activateMyProfile,ensureFresh,getAccessToken,getUserId,getUser,getProfile,getBusinessIds,isOwner,isAuthenticated,uploadBusinessLogo,deleteBusinessLogo,uploadAttachment,deleteAttachment,viewAttachment,downloadAttachment,logActivity,listActivities,deleteBusinessAccess,getCallbackType:()=>callbackType,getCallbackError:()=>callbackError,siteUrl,version:'16.0.0'};
 })();

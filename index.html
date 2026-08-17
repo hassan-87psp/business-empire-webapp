@@ -12,10 +12,10 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 
-<script defer src="app-config.js?v=15"></script>
-<script defer src="auth-client.js?v=15"></script>
-<script defer src="storage-adapter.js?v=15"></script>
-<script defer src="app.js?v=15"></script>
+<script defer src="app-config.js?v=16"></script>
+<script defer src="auth-client.js?v=16"></script>
+<script defer src="storage-adapter.js?v=16"></script>
+<script defer src="app.js?v=16"></script>
 <style>
 :root{
   --bg:#0B0E11; --bg2:#12151A; --card:#181A20; --card2:#1E2128;
@@ -485,6 +485,15 @@ tr:hover td{background:rgba(255,255,255,.02);}
 @media(max-width:900px){
   .grid2{grid-template-columns:1fr;} .form-row, .form-row.wide{grid-template-columns:1fr 1fr;} .summary-row{grid-template-columns:1fr 1fr;}
 }
+
+/* V16 activity, logo upload and secure attachment UI */
+.attachment-field{margin:12px 0 14px;padding:12px;border:1px dashed var(--border);border-radius:10px;background:var(--panel2)}
+.attachment-field.compact{margin-top:12px}.attachment-field label{display:block;font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px}.attachment-field label span,.file-help{font-weight:400;color:var(--sub);font-size:11px}.attachment-field input[type=file],.modal-field input[type=file]{width:100%;font-size:12px;color:var(--sub)}
+.file-actions{display:flex;gap:5px;flex-wrap:wrap}.file-pill{border:1px solid var(--border);background:var(--panel2);color:var(--gold);font-size:11px;font-weight:700;padding:5px 8px;border-radius:7px;cursor:pointer}.file-pill.secondary{color:var(--text)}.file-empty{color:var(--sub)}.existing-file{margin-top:10px;padding:9px;border-radius:8px;background:var(--panel);font-size:12px;color:var(--sub)}.remove-file-check{display:block!important;margin-top:9px!important;font-weight:500!important}.bs-attachment-row{margin-top:7px}.table-scroll{overflow-x:auto}
+.biz-logo-upload-row{display:flex;align-items:center;gap:14px}.biz-logo-preview{width:64px;height:64px;border-radius:14px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--panel2);color:var(--sub);font-size:10px;flex:0 0 64px}.biz-logo-preview img{width:100%;height:100%;object-fit:contain;padding:7px;box-sizing:border-box}
+.activity-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}.activity-tabs button{border:1px solid var(--border);background:var(--panel);color:var(--sub);border-radius:9px;padding:9px 13px;font-size:12px;font-weight:700;cursor:pointer}.activity-tabs button.active{background:var(--gold);color:#111;border-color:var(--gold)}.activity-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}.activity-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}.activity-filters select,.activity-filters input{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:9px 10px;border-radius:8px;font-size:12px}.activity-action{font-weight:700;color:var(--gold);font-size:12px}
+@media(max-width:760px){.activity-stats{grid-template-columns:1fr 1fr}.activity-filters>*{flex:1 1 140px}.biz-logo-upload-row{align-items:flex-start}.file-actions{min-width:120px}}
+
 </style>
 </head>
 <body>
