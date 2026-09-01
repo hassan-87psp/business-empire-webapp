@@ -1,0 +1,16 @@
+PipSePaisa V193 — Automatic Zoom Registration
+
+1) Upload/replace all website files in this patch.
+2) Supabase Edge Functions: redeploy `zoom-register-course` using the included index.ts.
+3) Keep the existing Zoom Server-to-Server OAuth secrets:
+   ZOOM_ACCOUNT_ID
+   ZOOM_CLIENT_ID
+   ZOOM_CLIENT_SECRET
+4) No new SQL is required if the Batch 1 Zoom registration tables already exist and V191 enrollment hotfix SQL has already been run.
+5) Hard refresh the website after deploy.
+
+Behavior:
+- Basic Course Batch 2 (`basic-b2`) auto-registers enrolled users for the 5 upcoming webinars.
+- Fundamental Course (`fundamental`) auto-registers enrolled users for the 3 upcoming webinars.
+- Personal Zoom join_url is stored in zoom_course_registrations and shown in the user course panel.
+- Advanced paid course is unchanged.
