@@ -1,0 +1,12 @@
+PipSePaisa V194 — Auto Zoom Registration Repair
+
+1. Upload/replace all files in this patch.
+2. Redeploy: supabase/functions/zoom-register-course/index.ts
+3. Keep existing Zoom Server-to-Server OAuth secrets.
+4. Hard refresh browser: Ctrl + Shift + R.
+
+Fix:
+- Existing free-course enrollments now trigger Zoom registration too.
+- New free enrollments wait for the Zoom registration request instead of redirecting away first.
+- Applies only to basic-b2 and fundamental.
+- Advanced paid course remains unchanged.
